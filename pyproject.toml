@@ -1,0 +1,24 @@
+[project]
+name = "rag-eval-foundations"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "arize-phoenix-otel",
+    "asyncpg",
+    "langchain",
+    "langchain-cohere",
+    "langchain-community",
+    "langchain-core",
+    "langchain-experimental",
+    "langchain-openai",
+    "langchain-postgres>=0.0.14",
+    "pandas",
+    "psycopg2-binary",
+    "python-dotenv",
+    "ragas",
+    "rank_bm25",
+    "requests",
+    "sqlalchemy",
+]
