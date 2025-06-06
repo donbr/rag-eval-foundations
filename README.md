@@ -56,6 +56,7 @@ Create a `.env` file (because hardcoding API keys is how we end up on r/Programm
 ```bash
 OPENAI_API_KEY=sk-your-actual-key-not-this-placeholder
 COHERE_API_KEY=your-cohere-key-goes-here
+PHOENIX_COLLECTOR_ENDPOINT="http://localhost:6006"
 ```
 
 **Pro tip:** Yes, you need both keys. Yes, they cost money. Yes, it's worth it. Think of it as buying premium gas for your AI Ferrari.
