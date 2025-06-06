@@ -12,8 +12,11 @@ wheels/
 # Secrets
 .env
 
-# Data files
-/data/
+# Data and Draft files
+/data/*
+!/data/.gitkeep
+/draft/*
+!/draft/.gitkeep
 
 # IDE configuration
 .vscode/

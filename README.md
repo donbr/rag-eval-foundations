@@ -2,7 +2,7 @@
 
 *Welcome, brave soul, to the wild world of Retrieval-Augmented Generation evaluation! You're about to embark on a journey that's part software engineering, part data science, and part digital archaeology. Don't worry—we've got your back.*
 
-For a deep-dive into the technical concepts and a complete walkthrough of the code, see the [full technical guide](langchain-eval-foundations-e2e.md).
+For a deep-dive into the technical concepts and a complete walkthrough of the code, see the [full technical guide](langchain_eval_foundations_e2e.md).
 
 ## 🎯 What You're Getting Into
 
@@ -98,7 +98,7 @@ docker run -it --rm --name phoenix-container \
 
 ### Launch Sequence
 ```bash
-python langchain-eval-foundations-e2e.py
+python langchain_eval_foundations_e2e.py
 ```
 
 **What should happen:**

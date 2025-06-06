@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 import requests
 import pandas as pd
 from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
+from langchain_core.documents import Document
 
 from phoenix.otel import register
 import phoenix as px
@@ -22,6 +24,70 @@ from ragas.testset.synthesizers import (
     MultiHopAbstractQuerySynthesizer,
     MultiHopSpecificQuerySynthesizer,
 )
+
+
+def load_docs_from_postgres(
+    table_name: str = "johnwick_baseline_documents",
+) -> list[Document]:
+    """
+    Loads documents from a PostgreSQL table into a list of LangChain Documents.
+
+    This function connects to the PostgreSQL database using credentials from environment
+    variables, reads the specified table into a pandas DataFrame, and then converts
+    each row into a LangChain Document object.
+
+    Args:
+        table_name: The name of the table to load the documents from.
+
+    Returns:
+        A list of LangChain Document objects.
+    """
+    # Load environment variables from .env file for local development
+    load_dotenv()
+
+    # Retrieve database connection details from environment variables
+    # with sensible defaults for the project.
+    POSTGRES_USER = os.getenv("POSTGRES_USER", "langchain")
+    POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "langchain")
+    POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+    POSTGRES_PORT = os.getenv("POSTGRES_PORT", "6024")
+    POSTGRES_DB = os.getenv("POSTGRES_DB", "langchain")
+
+    # Construct the synchronous database connection string for SQLAlchemy
+    sync_conn_str = (
+        f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@"
+        f"{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+    )
+
+    # Create a SQLAlchemy engine to connect to the database
+    engine = create_engine(sync_conn_str)
+
+    # Use a direct SQL query to select specific columns.
+    # This avoids issues with pandas/SQLAlchemy not recognizing the 'vector' type,
+    # which can cause table reflection to fail and result in missing columns.
+    try:
+        with engine.connect() as connection:
+            # Quoting the table name makes it case-sensitive and handles special chars
+            query = text(f'SELECT content, langchain_metadata FROM "{table_name}"')
+            df = pd.read_sql_query(query, connection)
+    except Exception as e:
+        print(f"Error executing query: {e}")
+        print("Please ensure the table name is correct and that the 'langchain-eval-foundations-e2e.py' script has run successfully.")
+        return []
+
+    # Convert the DataFrame to a list of LangChain Document objects.
+    # The PGVectorStore integration stores page content in 'content'
+    # and metadata in the 'langchain_metadata' JSONB column.
+    documents = [
+        Document(
+            page_content=row["content"],
+            metadata=row["langchain_metadata"],
+        )
+        for _, row in df.iterrows()
+    ]
+
+    print(f"Successfully loaded {len(documents)} documents from the '{table_name}' table.")
+    return documents
 
 
 def download_csvs(data_dir: Path, urls: list[tuple[str, str]], tracer):
@@ -241,8 +307,10 @@ def main():
     download_csvs(DATA_DIR, urls, tracer)
 
     with tracer.start_as_current_span("doc_loading") as span:
-        span.add_event("Loading and annotating documents")
-        all_review_docs = load_and_annotate_docs(DATA_DIR, tracer)
+        # span.add_event("Loading and annotating documents")
+        # all_review_docs = load_and_annotate_docs(DATA_DIR, tracer)
+        span.add_event("Loading and annotating documents from PostgreSQL")
+        all_review_docs = load_docs_from_postgres()
 
     # ──────────────────────────────────────────────────────────────────────────────
     # 4. Knowledge‐Graph Construction & Transformation
