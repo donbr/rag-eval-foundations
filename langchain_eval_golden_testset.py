@@ -293,18 +293,18 @@ def main():
     # ──────────────────────────────────────────────────────────────────────────────
     # 3. Data Ingestion
     # ──────────────────────────────────────────────────────────────────────────────
-    with tracer.start_as_current_span("data_setup") as span:
-        span.add_event("Creating data directory")
-        DATA_DIR = Path.cwd() / "data"
-        DATA_DIR.mkdir(exist_ok=True)
+    # with tracer.start_as_current_span("data_setup") as span:
+    #     span.add_event("Creating data directory")
+    #     DATA_DIR = Path.cwd() / "data"
+    #     DATA_DIR.mkdir(exist_ok=True)
 
-    urls = [
-        ("https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw1.csv", "john_wick_1.csv"),
-        ("https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw2.csv", "john_wick_2.csv"),
-        ("https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw3.csv", "john_wick_3.csv"),
-        ("https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw4.csv", "john_wick_4.csv"),
-    ]
-    download_csvs(DATA_DIR, urls, tracer)
+    # urls = [
+    #     ("https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw1.csv", "john_wick_1.csv"),
+    #     ("https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw2.csv", "john_wick_2.csv"),
+    #     ("https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw3.csv", "john_wick_3.csv"),
+    #     ("https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw4.csv", "john_wick_4.csv"),
+    # ]
+    # download_csvs(DATA_DIR, urls, tracer)
 
     with tracer.start_as_current_span("doc_loading") as span:
         # span.add_event("Loading and annotating documents")
