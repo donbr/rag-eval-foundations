@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 # Phoenix setup - using latest 2025 best practices with arize-phoenix-otel
 from phoenix.otel import register
+from opentelemetry import trace
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_postgres import PGEngine, PGVectorStore
@@ -217,19 +218,39 @@ def create_rag_chain(retriever, llm, method_name: str):
         "span_attributes": {"retriever": method_name}
     })
 
-
-async def run_evaluation(question: str, chains: Dict[str, Any]) -> Dict[str, str]:
-    """Run evaluation across all retrieval strategies"""
-    results = {}
+async def run_evaluation(question: str, traced_chains: Dict[str, Any]) -> Dict[str, str]:
+    """Run evaluation across all traced retrieval strategies with proper span nesting"""
+    from opentelemetry import trace
     
-    for method_name, chain in chains.items():
-        try:
-            result = await chain.ainvoke({"question": question})
-            response_content = result["response"].content
-            results[method_name] = response_content
-        except Exception as e:
-            logger.error(f"Error with {method_name}: {e}")
-            results[method_name] = f"Error: {str(e)}"
+    otel_tracer = trace.get_tracer(__name__)
+    
+    async def run_single_method(method_name: str, chain):
+        """Run a single method evaluation with its own child span"""
+        # Child spans will be nested under the parent span
+        with otel_tracer.start_as_current_span(f"retrieval_method_{method_name}") as span:
+            span.set_attribute("method_name", method_name)
+            span.set_attribute("question", question)
+            span.set_attribute("retrieval_strategy", method_name)
+            
+            try:
+                result = await chain(question)
+                response_content = result["response"].content
+                span.set_attribute("response_length", len(response_content))
+                span.set_attribute("context_count", len(result.get("context", [])))
+                span.set_attribute("status", "success")
+                return response_content
+            except Exception as e:
+                span.set_attribute("status", "error")
+                span.set_attribute("error_message", str(e))
+                span.record_exception(e)
+                logger.error(f"Error with {method_name}: {e}")
+                return f"Error: {str(e)}"
+    
+    # Run evaluation methods sequentially to ensure proper span nesting
+    # This will create child spans that are properly nested under the parent
+    results = {}
+    for name, chain in traced_chains.items():
+        results[name] = await run_single_method(name, chain)
     
     return results
 
@@ -281,11 +302,36 @@ async def main():
             for name, retriever in retrievers.items()
         }
 
+        # Create async traced wrappers using Phoenix decorators
+        tracer = tracer_provider.get_tracer(__name__)
+        traced_chains = {}
+        
+        for method_name, chain_callable in chains.items():
+            @tracer.chain(name=f"evaluation.{method_name}")
+            async def traced_chain(question: str, chain=chain_callable):
+                return await chain.ainvoke({"question": question})
+            
+            traced_chains[method_name] = traced_chain
+        
         # Run evaluation
         logger.info("🔍 Running evaluation...")
         question = "Did people generally like John Wick?"
         
-        results = await run_evaluation(question, chains)
+        # Get OpenTelemetry tracer for manual span creation
+        otel_tracer = trace.get_tracer(__name__)
+        
+        with otel_tracer.start_as_current_span("evaluation_all_methods") as span:
+            span.set_attribute("question", question)
+            span.set_attribute("num_methods", len(traced_chains))
+            span.set_attribute("retrieval_methods", list(traced_chains.keys()))
+            span.set_attribute("evaluation_type", "parallel_retrieval_comparison")
+            
+            results = await run_evaluation(question, traced_chains)
+            
+            # Add result summary to parent span
+            span.set_attribute("evaluation_completed", True)
+            span.set_attribute("successful_methods", len([r for r in results.values() if not r.startswith("Error:")]))
+            span.set_attribute("failed_methods", len([r for r in results.values() if r.startswith("Error:")]))
         
         # Log results
         logger.info("\n📊 Retrieval Strategy Results:")

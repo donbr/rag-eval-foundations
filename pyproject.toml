@@ -8,7 +8,6 @@ dependencies = [
     "arize-phoenix",
     "arize-phoenix-otel",
     "asyncpg",
-    "gradio",
     "ipykernel",
     "langchain",
     "langchain-cohere",

@@ -5,8 +5,7 @@ from datetime import datetime
 
 import pandas as pd
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, text
-from langchain_core.documents import Document
+from data_loader import load_docs_from_postgres
 
 import phoenix as px
 
@@ -14,44 +13,6 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from ragas.llms import LangchainLLMWrapper
 from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.testset import TestsetGenerator
-
-def load_docs_from_postgres(
-    table_name: str = "johnwick_baseline_documents",
-) -> list[Document]:
-    load_dotenv()
-
-    POSTGRES_USER = os.getenv("POSTGRES_USER", "langchain")
-    POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "langchain")
-    POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
-    POSTGRES_PORT = os.getenv("POSTGRES_PORT", "6024")
-    POSTGRES_DB = os.getenv("POSTGRES_DB", "langchain")
-
-    sync_conn_str = (
-        f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@"
-        f"{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-    )
-
-    engine = create_engine(sync_conn_str)
-
-    try:
-        with engine.connect() as connection:
-            query = text(f'SELECT content, langchain_metadata FROM "{table_name}"')
-            df = pd.read_sql_query(query, connection)
-    except Exception as e:
-        print(f"Error executing query: {e}")
-        print("Please ensure the table name is correct and that the 'langchain-eval-foundations-e2e.py' script has run successfully.")
-        return []
-
-    documents = [
-        Document(
-            page_content=row["content"],
-            metadata=row["langchain_metadata"],
-        )
-        for _, row in df.iterrows()
-    ]
-
-    print(f"Successfully loaded {len(documents)} documents from the '{table_name}' table.")
-    return documents
 
 def generate_testset(
     docs: list, llm, embeddings, testset_size: int = 10
