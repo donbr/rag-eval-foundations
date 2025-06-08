@@ -1,15 +1,17 @@
 import os
 import asyncio
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
+from dataclasses import dataclass
+from typing import Dict, List, Any
 
-import asyncpg
 import requests
-import pandas as pd
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
 
+# Phoenix setup - using latest 2025 best practices with arize-phoenix-otel
 from phoenix.otel import register
+from opentelemetry import trace
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_postgres import PGEngine, PGVectorStore
@@ -23,203 +25,311 @@ from langchain_cohere import CohereRerank
 from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain.retrievers import EnsembleRetriever
 
-async def main():
-    # ──────────────────────────────────────────────────────────────────────────────
-    # 1. Environment & Tracer Setup
-    # ──────────────────────────────────────────────────────────────────────────────
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Suppress verbose HTTP request logs since we have Phoenix tracing
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("openai._base_client").setLevel(logging.WARNING)
+logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
+
+# Centralized prompt template
+RAG_PROMPT = ChatPromptTemplate.from_template("""You are a helpful assistant. Use the context below to answer the question.
+If you don't know the answer, say you don't know.
+
+Question: {question}
+Context: {context}""")
+
+
+@dataclass
+class Config:
+    """Centralized configuration management"""
+    # API Keys
+    openai_api_key: str
+    cohere_api_key: str
+    
+    # Phoenix settings
+    phoenix_endpoint: str = "http://localhost:6006"
+    project_name: str = f"retrieval-evaluation-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
+    # Database settings
+    postgres_user: str = "langchain"
+    postgres_password: str = "langchain"
+    postgres_host: str = "localhost"
+    postgres_port: str = "6024"
+    postgres_db: str = "langchain"
+    vector_size: int = 1536
+    table_baseline: str = "johnwick_baseline_documents"
+    table_semantic: str = "johnwick_semantic_documents"
+    overwrite_existing_tables: bool = True
+    
+    # Model settings
+    model_name: str = "gpt-4.1-mini"
+    embedding_model: str = "text-embedding-3-small"
+    
+    # Data settings
+    data_urls: List[tuple] = None
+    
+    def __post_init__(self):
+        if self.data_urls is None:
+            self.data_urls = [
+                ("https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw1.csv", "john_wick_1.csv"),
+                ("https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw2.csv", "john_wick_2.csv"),
+                ("https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw3.csv", "john_wick_3.csv"),
+                ("https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw4.csv", "john_wick_4.csv"),
+            ]
+    
+    @property
+    def async_url(self) -> str:
+        return f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+
+
+def setup_environment() -> Config:
+    """Setup environment and return configuration"""
     load_dotenv()
-    os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY", "")
-    os.environ["COHERE_API_KEY"] = os.getenv("COHERE_API_KEY", "")
-    os.environ["PHOENIX_COLLECTOR_ENDPOINT"] = "http://localhost:4317"
-
-    project_name = f"retrieval-method-comparison-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    tracer_provider = register(project_name=project_name, auto_instrument=True)
-    tracer = tracer_provider.get_tracer(__name__)
-
-    # ──────────────────────────────────────────────────────────────────────────────
-    # 2. Initialize LLM + Embeddings
-    # ──────────────────────────────────────────────────────────────────────────────
-    llm = ChatOpenAI(model="gpt-4.1-mini")
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-
-    RAG_TEMPLATE = """\
-You are a helpful and kind assistant. Use the context provided below to answer the question.
-
-If you do not know the answer, or are unsure, say you don't know.
-
-Query:
-{question}
-
-Context:
-{context}
-"""
-    rag_prompt = ChatPromptTemplate.from_template(RAG_TEMPLATE)
-
-    # ──────────────────────────────────────────────────────────────────────────────
-    # 3. Postgres + pgvector Setup (with DuplicateTableError handling)
-    # ──────────────────────────────────────────────────────────────────────────────
-
-    POSTGRES_USER     = "langchain"
-    POSTGRES_PASSWORD = "langchain"
-    POSTGRES_HOST     = "localhost"
-    POSTGRES_PORT     = "6024"
-    POSTGRES_DB       = "langchain"
-    VECTOR_SIZE       = 1536
-    TABLE_BASELINE    = "johnwick_baseline_documents"
-    TABLE_SEMANTIC    = "johnwick_semantic_documents"
-
-    async_url = (
-        f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}"
-        f"@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+    
+    config = Config(
+        openai_api_key=os.getenv("OPENAI_API_KEY", ""),
+        cohere_api_key=os.getenv("COHERE_API_KEY", "")
     )
-    pg_engine = PGEngine.from_connection_string(url=async_url)
+    
+    # Set environment variables
+    os.environ["OPENAI_API_KEY"] = config.openai_api_key
+    os.environ["COHERE_API_KEY"] = config.cohere_api_key
+    os.environ["PHOENIX_COLLECTOR_ENDPOINT"] = config.phoenix_endpoint
+    
+    return config
 
-    # ──────────────────────────────────────────────────────────────────────────────
-    # Drop & recreate baseline table
-    # ──────────────────────────────────────────────────────────────────────────────
+
+def setup_phoenix_tracing(config: Config):
+    """Setup Phoenix tracing with auto-instrumentation (best practice)"""
+    return register(
+        project_name=config.project_name,
+        auto_instrument=True,  # This automatically traces LangChain components
+        batch=True  # Use BatchSpanProcessor for better performance
+    )
+
+
+async def setup_vector_store(config: Config, table_name: str, embeddings) -> PGVectorStore:
+    """Reusable function to setup vector stores"""
+    pg_engine = PGEngine.from_connection_string(url=config.async_url)
+    
     await pg_engine.ainit_vectorstore_table(
-        table_name=TABLE_BASELINE,
-        vector_size=VECTOR_SIZE,
-        overwrite_existing=True,  # drop if exists, then create
+        table_name=table_name,
+        vector_size=config.vector_size,
+        overwrite_existing=config.overwrite_existing_tables,
     )
-
-    # ──────────────────────────────────────────────────────────────────────────────
-    # Drop & recreate semantic table
-    # ──────────────────────────────────────────────────────────────────────────────
-    await pg_engine.ainit_vectorstore_table(
-        table_name=TABLE_SEMANTIC,
-        vector_size=VECTOR_SIZE,
-        overwrite_existing=True,  # drop if exists, then create
-    )
-
-    baseline_vectorstore = await PGVectorStore.create(
+    
+    return await PGVectorStore.create(
         engine=pg_engine,
-        table_name=TABLE_BASELINE,
-        embedding_service=embeddings,
-    )
-    semantic_vectorstore = await PGVectorStore.create(
-        engine=pg_engine,
-        table_name=TABLE_SEMANTIC,
+        table_name=table_name,
         embedding_service=embeddings,
     )
 
-    # ──────────────────────────────────────────────────────────────────────────────
-    # 4. Data Ingestion
-    # ──────────────────────────────────────────────────────────────────────────────
-    DATA_DIR = Path.cwd() / "data"
-    DATA_DIR.mkdir(exist_ok=True)
-    urls = [
-        ("https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw1.csv", "john_wick_1.csv"),
-        ("https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw2.csv", "john_wick_2.csv"),
-        ("https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw3.csv", "john_wick_3.csv"),
-        ("https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw4.csv", "john_wick_4.csv"),
-    ]
 
-    all_review_docs = []
-    for idx, (url, fname) in enumerate(urls, start=1):
-        file_path = DATA_DIR / fname
+async def load_and_process_data(config: Config) -> List:
+    """Load and process John Wick movie review data"""
+    data_dir = Path.cwd() / "data"
+    data_dir.mkdir(exist_ok=True)
+    
+    all_docs = []
+    
+    for idx, (url, filename) in enumerate(config.data_urls, start=1):
+        file_path = data_dir / filename
+        
+        # Download if not exists
         if not file_path.exists():
-            resp = requests.get(url)
-            resp.raise_for_status()
-            file_path.write_bytes(resp.content)
+            try:
+                response = requests.get(url)
+                response.raise_for_status()
+                file_path.write_bytes(response.content)
+            except requests.RequestException as e:
+                logger.error(f"Error downloading {filename}: {e}")
+                continue
+        
+        # Load documents
+        try:
+            loader = CSVLoader(
+                file_path=file_path,
+                metadata_columns=["Review_Date", "Review_Title", "Review_Url", "Author", "Rating"]
+            )
+            docs = loader.load()
+            
+            # Add metadata
+            for doc in docs:
+                doc.metadata.update({
+                    "Movie_Title": f"John Wick {idx}",
+                    "Rating": int(doc.metadata.get("Rating", 0) or 0),
+                    "last_accessed_at": (datetime.now() - timedelta(days=4 - idx)).isoformat()
+                })
+            
+            all_docs.extend(docs)
+            
+        except Exception as e:
+            logger.error(f"Error loading {filename}: {e}")
+            continue
+    
+    return all_docs
 
-        loader = CSVLoader(
-            file_path=file_path,
-            metadata_columns=["Review_Date", "Review_Title", "Review_Url", "Author", "Rating"]
-        )
-        docs = loader.load()
-        for doc in docs:
-            doc.metadata["Movie_Title"]     = f"John Wick {idx}"
-            doc.metadata["Rating"]          = int(doc.metadata.get("Rating", 0) or 0)
-            doc.metadata["last_accessed_at"] = (datetime.now() - timedelta(days=4 - idx)).isoformat()
-        all_review_docs.extend(docs)
 
-    # ──────────────────────────────────────────────────────────────────────────────
-    # 5. Ingest into Vector Stores
-    # ──────────────────────────────────────────────────────────────────────────────
-    await baseline_vectorstore.aadd_documents(all_review_docs)
-
-    semantic_chunker = SemanticChunker(
-        embeddings=embeddings,
-        breakpoint_threshold_type="percentile"
-    )
-    semantic_docs = semantic_chunker.split_documents(all_review_docs)
-    await semantic_vectorstore.aadd_documents(semantic_docs)
-
-    # ──────────────────────────────────────────────────────────────────────────────
-    # 6. Build Retriever Chains
-    # ──────────────────────────────────────────────────────────────────────────────
-    naive_retriever   = baseline_vectorstore.as_retriever(search_kwargs={"k": 10})
-    bm25_retriever    = BM25Retriever.from_documents(all_review_docs)
-    cohere_rerank     = CohereRerank(model="rerank-english-v3.0")
-    compression_retriever = ContextualCompressionRetriever(
+def create_retrievers(baseline_vectorstore, semantic_vectorstore, all_docs, llm) -> Dict[str, Any]:
+    """Create all retrieval strategies"""
+    retrievers = {}
+    
+    # Basic retrievers
+    retrievers["naive"] = baseline_vectorstore.as_retriever(search_kwargs={"k": 10})
+    retrievers["semantic"] = semantic_vectorstore.as_retriever(search_kwargs={"k": 10})
+    retrievers["bm25"] = BM25Retriever.from_documents(all_docs)
+    
+    # Advanced retrievers
+    cohere_rerank = CohereRerank(model="rerank-english-v3.0")
+    retrievers["compression"] = ContextualCompressionRetriever(
         base_compressor=cohere_rerank,
-        base_retriever=naive_retriever
+        base_retriever=retrievers["naive"]
     )
-    multi_query_retriever = MultiQueryRetriever.from_llm(
-        retriever=naive_retriever,
+    
+    retrievers["multiquery"] = MultiQueryRetriever.from_llm(
+        retriever=retrievers["naive"],
         llm=llm
     )
-    ensemble_retriever = EnsembleRetriever(
-        retrievers=[bm25_retriever, naive_retriever, compression_retriever, multi_query_retriever],
+    
+    retrievers["ensemble"] = EnsembleRetriever(
+        retrievers=[
+            retrievers["bm25"], 
+            retrievers["naive"], 
+            retrievers["compression"], 
+            retrievers["multiquery"]
+        ],
         weights=[0.25, 0.25, 0.25, 0.25]
     )
-    semantic_retriever = semantic_vectorstore.as_retriever(search_kwargs={"k": 10})
+    
+    return retrievers
 
-    def make_chain(retriever):
-        return (
-            {"context": itemgetter("question") | retriever, "question": itemgetter("question")}
-            | RunnablePassthrough.assign(context=itemgetter("context"))
-            | {"response": rag_prompt | llm, "context": itemgetter("context")}
-        )
 
-    chains = {
-        "naive":      make_chain(naive_retriever),
-        "bm25":       make_chain(bm25_retriever),
-        "compression":make_chain(compression_retriever),
-        "multiquery": make_chain(multi_query_retriever),
-        "ensemble":   make_chain(ensemble_retriever),
-        "semantic":   make_chain(semantic_retriever),
+def create_rag_chain(retriever, llm, method_name: str):
+    """Create a simple RAG chain with method identification - Phoenix auto-traces this"""
+    chain = (
+        {"context": itemgetter("question") | retriever, "question": itemgetter("question")}
+        | RunnablePassthrough.assign(context=itemgetter("context"))
+        | {"response": RAG_PROMPT | llm, "context": itemgetter("context")}
+    )
+    
+    # Use uniform span name with retriever tag for easier Phoenix filtering
+    return chain.with_config({
+        "run_name": "rag_chain",
+        "span_attributes": {"retriever": method_name}
+    })
+
+
+async def run_evaluation(question: str, traced_chains: Dict[str, Any]) -> Dict[str, str]:
+    """Run evaluation across all traced retrieval strategies in parallel"""
+    # Create tasks for parallel execution
+    tasks = {
+        name: asyncio.create_task(chain(question), name=f"eval_{name}")
+        for name, chain in traced_chains.items()
     }
+    
+    results = {}
+    
+    # Wait for all tasks to complete and handle results/errors
+    for method_name, task in tasks.items():
+        try:
+            result = await task
+            results[method_name] = result["response"].content
+        except Exception as e:
+            logger.error(f"Error with {method_name}: {e}")
+            results[method_name] = f"Error: {str(e)}"
+    
+    return results
 
-    # ──────────────────────────────────────────────────────────────────────────────
-    # 7. TRACE: Unique Span Names + Retriever Tag
-    # ──────────────────────────────────────────────────────────────────────────────
-    tracers = {}
-    for method_name, chain_callable in chains.items():
-        @tracer.chain(name=f"chain.{method_name}")
-        def _traced(question: str, fn=chain_callable, strategy=method_name):
-            try:
-                out = fn.invoke({"question": question})
-                return {
-                    "response": out["response"].content,
-                    "context_docs": len(out["context"]),
-                    "retriever": strategy,  # added as span attribute
-                }
-            except Exception as e:
-                return {"error": str(e), "retriever": strategy}
 
-        _traced.__name__ = f"traced_{method_name}"
-        tracers[method_name] = _traced
+async def main():
+    """Main execution function"""
+    try:
+        # Setup
+        config = setup_environment()
+        tracer_provider = setup_phoenix_tracing(config)
+        
+        logger.info(f"✅ Phoenix tracing configured for project: {config.project_name}")
+        
+        # Initialize models
+        llm = ChatOpenAI(model=config.model_name)
+        embeddings = OpenAIEmbeddings(model=config.embedding_model)
+        
+        # Load data
+        logger.info("📥 Loading and processing data...")
+        all_docs = await load_and_process_data(config)
+        
+        if not all_docs:
+            raise ValueError("No documents loaded successfully")
+        
+        # Setup vector stores
+        logger.info("🔧 Setting up vector stores...")
+        baseline_vectorstore = await setup_vector_store(config, config.table_baseline, embeddings)
+        semantic_vectorstore = await setup_vector_store(config, config.table_semantic, embeddings)
+        
+        # Ingest data
+        logger.info("📊 Ingesting documents...")
+        await baseline_vectorstore.aadd_documents(all_docs)
+        
+        # Semantic chunking
+        semantic_chunker = SemanticChunker(
+            embeddings=embeddings,
+            breakpoint_threshold_type="percentile"
+        )
+        semantic_docs = semantic_chunker.split_documents(all_docs)
+        await semantic_vectorstore.aadd_documents(semantic_docs)
+        
+        # Create retrievers and chains
+        logger.info("⚙️ Creating retrieval strategies...")
+        retrievers = create_retrievers(baseline_vectorstore, semantic_vectorstore, all_docs, llm)
+        
+        # Create RAG chains
+        chains = {
+            name: create_rag_chain(retriever, llm, name)
+            for name, retriever in retrievers.items()
+        }
+        
+        # Create async traced wrappers using Phoenix decorators
+        tracer = tracer_provider.get_tracer(__name__)
+        traced_chains = {}
+        
+        for method_name, chain_callable in chains.items():
+            @tracer.chain(name=f"evaluation.{method_name}")
+            async def traced_chain(question: str, chain=chain_callable):
+                return await chain.ainvoke({"question": question})
+            
+            traced_chains[method_name] = traced_chain
+        
+        # Run evaluation with parallel execution and proper OpenTelemetry span
+        logger.info("🔍 Running evaluation...")
+        question = "Did people generally like John Wick?"
+        
+        # Get OpenTelemetry tracer for manual span creation
+        otel_tracer = trace.get_tracer(__name__)
+        
+        with otel_tracer.start_as_current_span("evaluation_all_methods") as span:
+            span.set_attribute("question", question)
+            span.set_attribute("num_methods", len(traced_chains))
+            
+            results = await run_evaluation(question, traced_chains)
+        
+        # Log results (Phoenix handles the detailed analytics)
+        logger.info("\n📊 Retrieval Strategy Results:")
+        logger.info("=" * 50)
+        for method, response in results.items():
+            logger.info(f"\n{method:15} {response}")
+        
+        logger.info(f"\n✅ Evaluation complete! View traces at: {config.phoenix_endpoint}")
+        
+    except Exception as e:
+        logger.error(f"❌ Error during execution: {e}")
+        raise
+    finally:
+        # Resource cleanup
+        logger.info("🔄 Cleanup completed")
 
-    print("✅ Phoenix-traced retrieval functions are ready.")
-
-    # ──────────────────────────────────────────────────────────────────────────────
-    # 8. Execute & Compare All Strategies
-    # ──────────────────────────────────────────────────────────────────────────────
-    question = "Did people generally like John Wick?"
-    results = {label: tracers[label](question)["response"] for label in tracers}
-
-    df_results = pd.DataFrame.from_dict(results, orient="index", columns=["Response"])
-    print("\n📊 Retrieval Strategy Outputs:\n", df_results)
-
-    # ──────────────────────────────────────────────────────────────────────────────
-    # 9. (Optional) Inspect pgvector table via pandas
-    # ──────────────────────────────────────────────────────────────────────────────
-    sync_conn_str = async_url.replace("+asyncpg", "")
-    sync_engine = create_engine(sync_conn_str)
-    df_baseline = pd.read_sql_table("johnwick_baseline_documents", con=sync_engine)
-    print(df_baseline.head())
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main()) 
