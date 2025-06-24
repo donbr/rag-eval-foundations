@@ -18,6 +18,14 @@ wheels/
 /draft/*
 !/draft/.gitkeep
 
+# Generated output files
+/outputs/
+
+# Diagram exports (optional tracking)
+# Uncomment the line below if you don't want to track exported diagram images
+# /diagrams/exports/*.png
+# /diagrams/exports/*.svg
+
 # IDE configuration
 .vscode/
 .idea/

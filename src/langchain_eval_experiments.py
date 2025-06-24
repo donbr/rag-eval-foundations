@@ -16,13 +16,106 @@ from langchain_cohere import CohereRerank
 from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain.retrievers import EnsembleRetriever
 
+from phoenix.experiments.evaluators import create_evaluator
+from phoenix.evals import QAEvaluator, OpenAIModel, RelevanceEvaluator
+
+# QA Correctness Evaluator (from Phoenix official docs)
+@create_evaluator(name="qa_correctness_score")
+def qa_correctness_evaluator(output, reference, input):
+    """
+    Evaluates answer correctness against ground truth
+    Based on Phoenix official documentation: 
+    https://arize.com/docs/phoenix/evaluation/evals
+    """
+    try:
+        # Using approved model for Phoenix evaluation
+        eval_model = OpenAIModel(model="gpt-4.1-mini")
+        
+        # Create QA evaluator with the model (official Phoenix pattern)
+        evaluator = QAEvaluator(eval_model)
+        
+        # The dataframe columns expected by Phoenix QAEvaluator are:
+        # 'output', 'input', 'reference' (from official docs)
+        import pandas as pd
+        eval_df = pd.DataFrame([{
+            'output': output,
+            'input': input, 
+            'reference': reference
+        }])
+        
+        # Use run_evals as shown in official docs
+        from phoenix.evals import run_evals
+        result_df = run_evals(
+            dataframe=eval_df, 
+            evaluators=[evaluator]
+        )[0]  # QA evaluator is first in list
+        
+        # Extract score from result
+        return float(result_df.iloc[0]['score']) if len(result_df) > 0 else 0.0
+        
+    except Exception as e:
+        print(f"QA Evaluation error: {e}")
+        return 0.0
+
+@create_evaluator(name="rag_relevance_score")  
+def rag_relevance_evaluator(output, input, metadata):
+    """
+    Evaluates whether retrieved context is relevant to the query
+    Based on Phoenix RAG Relevance documentation
+    """
+    try:
+        eval_model = OpenAIModel(model="gpt-4.1-mini")
+        evaluator = RelevanceEvaluator(eval_model)
+        
+        # Get retrieved context from metadata
+        retrieved_context = metadata.get('retrieved_context', '')
+        if isinstance(retrieved_context, list):
+            retrieved_context = ' '.join(str(doc) for doc in retrieved_context)
+        
+        import pandas as pd
+        eval_df = pd.DataFrame([{
+            'input': input,
+            'reference': str(retrieved_context)
+        }])
+        
+        from phoenix.evals import run_evals
+        result_df = run_evals(
+            dataframe=eval_df,
+            evaluators=[evaluator] 
+        )[0]
+        
+        return float(result_df.iloc[0]['score']) if len(result_df) > 0 else 0.0
+        
+    except Exception as e:
+        print(f"RAG Relevance evaluation error: {e}")
+        return 0.0
+
+# Updated experiment execution for your main() function:
+# This captures retrieval context needed for RAG relevance evaluation
+def create_enhanced_task_function(strategy_chain, strategy):
+    def task(example: Example) -> dict:
+        """
+        Modified to return dict with metadata for Phoenix evaluators
+        """
+        question = example.input["input"]
+        result = strategy_chain.invoke({"question": question})
+        
+        return {
+            "output": result["response"].content,
+            "metadata": {
+                "retrieved_context": result.get("context", []),
+                "strategy": strategy
+            }
+        }
+    return task
+
 async def main():
     load_dotenv()
     os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY", "")
     os.environ["COHERE_API_KEY"] = os.getenv("COHERE_API_KEY", "")
     os.environ["PHOENIX_COLLECTOR_ENDPOINT"] = os.getenv("PHOENIX_COLLECTOR_ENDPOINT")
 
-    # Connect to Phoenix and get the dataset (ONCE)
+    # Connect to Phoenix and get the dataset
     px_client = px.Client()
     dataset = px_client.get_dataset(name="johnwick_golden_testset")
     
@@ -143,8 +236,10 @@ Context:
         try:
             experiment = run_experiment(
                 dataset=dataset,
-                task=task_function,
-                experiment_name=experiment_name
+                task=create_enhanced_task_function(chain, strategy_name),
+                evaluators=[qa_correctness_evaluator, rag_relevance_evaluator],
+                experiment_name=experiment_name,
+                experiment_description=f"QA correctness and RAG relevance evaluation for {strategy_name}"
             )
             
             print(f"✅ {strategy_name} experiment completed!")

@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pandas as pd
 from dotenv import load_dotenv
-from data_loader import load_docs_from_postgres
+from src.data_loader import load_docs_from_postgres
 
 import phoenix as px
 

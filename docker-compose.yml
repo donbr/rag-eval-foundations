@@ -1,0 +1,77 @@
+# Project-specific network for isolation
+networks:
+  rag-eval-network:
+    name: rag-eval-network
+    driver: bridge
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: rag-eval-pgvector
+    environment:
+      - POSTGRES_USER=langchain
+      - POSTGRES_PASSWORD=langchain
+      - POSTGRES_DB=langchain
+    ports:
+      - "${POSTGRES_PORT:-6024}:5432"
+    volumes:
+      - rag_eval_postgres_data:/var/lib/postgresql/data
+    networks:
+      - rag-eval-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langchain"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      - "project=rag-eval-foundations"
+      - "component=database"
+    restart: unless-stopped
+
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: rag-eval-phoenix
+    environment:
+      - PHOENIX_PROJECT_NAME=rag-eval-${TIMESTAMP:-default}
+    ports:
+      - "${PHOENIX_UI_PORT:-6006}:6006"     # Phoenix UI
+      - "${PHOENIX_OTLP_PORT:-4317}:4317"   # OpenTelemetry collector
+    networks:
+      - rag-eval-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6006/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      - "project=rag-eval-foundations"
+      - "component=observability"
+    restart: unless-stopped
+
+volumes:
+  rag_eval_postgres_data:
+    name: rag_eval_postgres_data
+    driver: local
+    labels:
+      - "project=rag-eval-foundations"
+
+# Usage:
+# 1. Check if services are already running: docker ps | grep rag-eval
+# 2. Start all services: docker-compose up -d
+# 3. Stop all services: docker-compose down
+# 4. Stop and remove volumes: docker-compose down -v
+# 5. View logs: docker-compose logs -f [service_name]
+# 6. Restart a service: docker-compose restart [service_name]
+#
+# Custom ports (via .env file or environment variables):
+# - POSTGRES_PORT=6024 (default)
+# - PHOENIX_UI_PORT=6006 (default)
+# - PHOENIX_OTLP_PORT=4317 (default)
+#
+# Services will be accessible at:
+# - PostgreSQL: localhost:${POSTGRES_PORT:-6024}
+# - Phoenix UI: http://localhost:${PHOENIX_UI_PORT:-6006}
+# - Phoenix OTLP: localhost:${PHOENIX_OTLP_PORT:-4317}
+#
+# To check for conflicts before starting:
+# docker ps --format "table {{.Names}}\t{{.Ports}}" | grep -E "(6024|6006|4317)"
