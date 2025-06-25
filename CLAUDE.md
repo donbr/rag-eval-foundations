@@ -19,6 +19,9 @@ source .venv/bin/activate  # On Unix/macOS
 
 # Install dependencies
 uv sync
+
+# Verify critical dependencies
+python -c "import langchain, openai, cohere, ragas; print('Dependencies verified')"
 ```
 
 ### Running the Application
@@ -73,8 +76,20 @@ python validation/retrieval_strategy_comparison.py
 # Check service status and port conflicts BEFORE starting
 ./claude_code_scripts/check-services.sh
 
+# Validate service ports are available
+netstat -tulpn | grep -E ":(6024|6006|4317)\s" || echo "Ports available"
+
 # Start all services with docker-compose (recommended)
 docker-compose up -d
+
+# Verify services are running
+docker ps --filter 'label=project=rag-eval-foundations'
+
+# Test database connection
+psql -h localhost -p 6024 -U langchain -d langchain -c "\dt"
+
+# Check Phoenix is responding
+curl -s http://localhost:6006/health || echo "Phoenix not ready"
 
 # Stop services
 docker-compose down
@@ -106,24 +121,50 @@ All containers use the `rag-eval-` prefix:
 
 This prevents conflicts with other projects' containers.
 
+#### Manual Docker Management (Alternative)
+```bash
+# PostgreSQL with pgvector
+docker run -it --rm --name pgvector-container \
+  -e POSTGRES_USER=langchain \
+  -e POSTGRES_PASSWORD=langchain \
+  -e POSTGRES_DB=langchain \
+  -p 6024:5432 \
+  pgvector/pgvector:pg16
+
+# Phoenix with timestamped project names
+export TS=$(date +"%Y%m%d_%H%M%S")
+docker run -it --rm --name phoenix-container \
+  -e PHOENIX_PROJECT_NAME="retrieval-comparison-${TS}" \
+  -p 6006:6006 \
+  -p 4317:4317 \
+  arizephoenix/phoenix:latest
+```
+
 ## Architecture
 
 ### Core Components
 
-1. **Data Loading** (`data_loader.py`): Loads John Wick movie reviews from CSV files into PostgreSQL/pgvector
-2. **Retrieval Strategies**: Six different approaches implemented:
-   - **Naive Vector Search**: Basic similarity search using OpenAI embeddings
-   - **Semantic Chunking**: Uses SemanticChunker to create meaningful document segments
-   - **BM25**: Keyword-based retrieval using term frequency
-   - **Contextual Compression**: Filters chunks using Cohere reranking
-   - **Multi-Query**: Generates query variations for broader coverage
-   - **Ensemble**: Combines all strategies with equal weights (25% each)
+1. **Data Pipeline**: 
+   - CSV ingestion from John Wick movie reviews
+   - Async document processing with metadata enrichment
+   - PostgreSQL/pgvector storage with 1536-dimension embeddings
+   
+2. **Retrieval Architecture**:
+   - **Factory Pattern**: `create_retrievers()` provides unified interface
+   - **Async-First Design**: All operations use `asyncio` and `PGEngine` connection pooling
+   - **Six Strategy Implementation**:
+     - Naive Vector Search (OpenAI embeddings)
+     - Semantic Chunking (SemanticChunker with percentile breakpoints)
+     - BM25 (keyword-based term frequency)
+     - Contextual Compression (Cohere reranking)
+     - Multi-Query (LLM-generated query variations)
+     - Ensemble (Reciprocal Rank Fusion with equal weights)
 
 3. **Complete 3-Stage Evaluation Pipeline**: 
    - **Stage 1**: Infrastructure setup and manual strategy comparison
-   - **Stage 2**: RAGAS golden test set generation
-   - **Stage 3**: Automated evaluation with metrics and experiments
-   - Traces all operations with Phoenix for debugging
+   - **Stage 2**: RAGAS golden test set generation with LLM wrappers
+   - **Stage 3**: Automated evaluation with Phoenix experiment framework
+   - **Observability-First**: Auto-instrumentation with structured tracing
 
 ### Retrieval Strategy Details
 
@@ -162,12 +203,21 @@ This prevents conflicts with other projects' containers.
 - Currently uses equal weights (25% each)
 - Balances strengths of different approaches
 
-### Key Dependencies
-- **LangChain**: Core framework with community extensions
-- **OpenAI API**: For embeddings (text-embedding-3-small) and chat (gpt-4.1-mini)
-- **Cohere API**: For reranking in contextual compression
-- **PostgreSQL + pgvector**: Vector database for similarity search
-- **Phoenix (Arize)**: LLM observability platform using OpenTelemetry
+### Key Dependencies & Architecture Patterns
+
+#### Core Framework
+- **LangChain**: Retriever abstraction and chain composition
+- **OpenAI API**: Embeddings (text-embedding-3-small) and LLM (gpt-4.1-mini)
+- **Cohere API**: Reranking with rerank-english-v3.0 model
+- **PostgreSQL + pgvector**: Vector similarity search with SQL capabilities
+- **Phoenix (Arize)**: OpenTelemetry-based LLM observability
+
+#### Design Patterns
+- **Configuration Dataclass**: Centralized `Config` class with environment overrides
+- **Async Connection Management**: `PGEngine` handles connection pooling
+- **Factory Pattern**: Consistent retriever creation and management
+- **Chain Composition**: Standardized RAG chains for fair comparison
+- **Error Handling**: Graceful degradation with structured logging
 
 ### Environment Variables
 Required in `.env` file:
@@ -208,24 +258,55 @@ The framework supports both reference-free evaluation (using LLMs) and golden da
 ### Common Issues and Solutions
 
 #### Vector Search Returns No Results
-- Check PostgreSQL connection: `psql -h localhost -p 6024 -U langchain -d langchain`
-- Verify tables exist: `\dt` in psql
-- Ensure data was loaded successfully (check logs)
+```bash
+# Test database connection
+psql -h localhost -p 6024 -U langchain -d langchain -c "\dt"
+
+# Check table contents
+psql -h localhost -p 6024 -U langchain -d langchain -c "SELECT COUNT(*) FROM johnwick_baseline_documents;"
+
+# Verify embeddings are populated
+psql -h localhost -p 6024 -U langchain -d langchain -c "SELECT COUNT(*) FROM johnwick_baseline_documents WHERE embedding IS NOT NULL;"
+```
 
 #### API Rate Limits
+- Monitor token usage in Phoenix traces
 - Implement exponential backoff in API calls
-- Reduce batch sizes for embedding generation
 - Consider caching embeddings for repeated runs
+- Reduce batch sizes for embedding generation
 
 #### Phoenix Connection Issues
-- Ensure container is running: `docker ps`
-- Check endpoint configuration matches container ports
-- Verify no firewall blocking localhost connections
+```bash
+# Verify Phoenix is running
+docker ps --filter 'name=phoenix'
+
+# Test Phoenix health endpoint
+curl -s http://localhost:6006/health
+
+# Check Phoenix traces
+curl -s http://localhost:6006/v1/traces | jq '.data | length'
+
+# Validate OTLP endpoint
+telnet localhost 4317
+```
+
+#### Service Port Conflicts
+```bash
+# Check what's using our ports
+lsof -i :6024  # PostgreSQL
+lsof -i :6006  # Phoenix UI
+lsof -i :4317  # Phoenix OTLP
+
+# Use alternative ports via environment
+export POSTGRES_PORT=6025
+export PHOENIX_UI_PORT=6007
+export PHOENIX_OTLP_PORT=4318
+```
 
 #### Async Event Loop Errors
-- Common in Jupyter notebooks
-- Use `asyncio.run()` for standalone scripts
-- Consider using synchronous alternatives for debugging
+- Common in Jupyter notebooks - use `asyncio.run()` for standalone scripts
+- Ensure proper async context management with `PGEngine`
+- Check for hanging connections with `docker logs rag-eval-pgvector`
 
 ### Code Organization
 
@@ -239,19 +320,54 @@ Key files and their purposes:
 
 ### Extending the Framework
 
-To add a new retrieval strategy:
-1. Implement retriever in `create_retrievers()` function
-2. Add to the retrievers dictionary with descriptive name
-3. Update ensemble weights if including in ensemble
-4. Document strategy in this file
+#### Adding New Retrieval Strategies
+1. **Implement in `create_retrievers()`**:
+   ```python
+   def create_retrievers(baseline_vectorstore, semantic_vectorstore, all_docs, llm):
+       # Add your new retriever
+       custom_retriever = YourCustomRetriever(...)
+       
+       return {
+           "existing_strategies": ...,
+           "your_strategy": custom_retriever
+       }
+   ```
+
+2. **Update ensemble weights** if including in ensemble strategy
+3. **Add Phoenix tracing tags** for observability
+4. **Document strategy behavior** and use cases
+5. **Test with validation scripts** in `validation/` directory
+
+#### Adding Custom Evaluators
+1. Implement evaluator following Phoenix experiment framework
+2. Add to `langchain_eval_experiments.py`
+3. Update golden test set if needed for your metrics
 
 ### Performance Optimization
 
-- **Batch Operations**: Use `aadd_documents()` for async batch ingestion
-- **Connection Pooling**: PGEngine handles connection management
-- **Embedding Cache**: Consider caching embeddings for large datasets
-- **Chunk Size**: Balance between context and embedding quality
-- **Concurrent Retrieval**: Async operations enable parallel processing
+#### Database Operations
+- **Async Batch Ingestion**: Use `aadd_documents()` for large document sets
+- **Connection Pooling**: `PGEngine` manages async connection lifecycle
+- **Index Optimization**: pgvector uses HNSW indexing for similarity search
+- **Chunk Size Tuning**: Balance context preservation vs. embedding quality
+
+#### API Optimization
+- **Embedding Caching**: Store embeddings to avoid regeneration
+- **Concurrent Operations**: Leverage async patterns for parallel processing
+- **Rate Limit Management**: Monitor Phoenix traces for API usage patterns
+- **Batch Size Tuning**: Optimize OpenAI embedding batch sizes
+
+#### Monitoring & Debugging
+```bash
+# Monitor database performance
+psql -h localhost -p 6024 -U langchain -d langchain -c "SELECT * FROM pg_stat_activity;"
+
+# Check Phoenix trace volume
+curl -s http://localhost:6006/v1/traces | jq '.data | length'
+
+# Monitor container resources
+docker stats rag-eval-pgvector rag-eval-phoenix
+```
 
 ### Model Requirements
 
