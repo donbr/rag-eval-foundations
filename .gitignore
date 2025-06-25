@@ -21,6 +21,10 @@ wheels/
 # Generated output files
 /outputs/
 
+# Log files and directories
+/logs/
+*.log
+
 # Diagram exports (optional tracking)
 # Uncomment the line below if you don't want to track exported diagram images
 # /diagrams/exports/*.png
