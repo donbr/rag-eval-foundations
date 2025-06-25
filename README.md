@@ -1,4 +1,4 @@
-# 🚀 RAG Evaluation Foundations: Survival Guide for Intrepid Adventurers
+# 🚀 RAG Evaluation Pipeline: Complete 3-Stage Toolkit for LangChain & RAGAS
 
 *Welcome, brave soul, to the wild world of Retrieval-Augmented Generation evaluation! You're about to embark on a journey that's part software engineering, part data science, and part digital archaeology. Don't worry—we've got your back.*
 
@@ -10,7 +10,9 @@ For a deep-dive into the technical concepts and a complete walkthrough of the co
 - The difference between semantic search, keyword search (BM25), and hybrid approaches
 - How to use Phoenix for LLM observability and debugging
 - Setting up a vector database with PostgreSQL and pgvector
-- The foundations for implementing RAGAS evaluation metrics
+- Complete RAGAS implementation for golden test sets and automated evaluation
+
+📖 **Want deeper technical insights?** Check out the [DeepWiki documentation](https://deepwiki.com/donbr/rag-eval-foundations) for architecture diagrams and detailed explanations.
 
 ## 📋 Prerequisites
 
@@ -22,11 +24,41 @@ For a deep-dive into the technical concepts and a complete walkthrough of the co
 
 ## 🎯 What You're Getting Into
 
-**This is NOT the final evaluation pipeline yet!** Think of this as "RAG Evaluation Bootcamp" - you're learning to crawl before you sprint.
+**You're getting a complete 3-stage RAG evaluation pipeline!** This isn't just a foundation - it's a full toolkit that takes you from infrastructure setup through automated evaluation with RAGAS golden test sets.
 
-You're building a comparison engine for 6 different ways to find relevant information, then asking an AI to answer questions based on what it finds. Think of it as speed-dating for search algorithms, with John Wick movie reviews as your wingman.
+You're building:
+1. **Stage 1**: A comparison engine for 6 different retrieval strategies
+2. **Stage 2**: Automated test generation with RAGAS golden datasets
+3. **Stage 3**: Systematic evaluation with metrics and experiment tracking
 
-**The real magic happens later** when we add RAGAS for golden test sets and structured evaluation metrics. Right now, we're just getting comfortable with LangChain retrievers and observability tooling.
+Think of it as a complete RAG evaluation laboratory, with John Wick movie reviews as your test subject. By the end, you'll have objective metrics telling you which retrieval strategy performs best.
+
+## 🎯 The Complete 3-Stage Pipeline
+
+This toolkit implements a production-ready evaluation pipeline that progresses through three stages:
+
+### 🏭 Stage 1: Foundation & Infrastructure
+**Script**: `langchain_eval_foundations_e2e.py`
+- Sets up PostgreSQL with pgvector for hybrid search
+- Implements 6 different retrieval strategies
+- Provides side-by-side comparison with Phoenix tracing
+- **You learn**: How different retrieval methods work and when to use each
+
+### 🧪 Stage 2: Golden Test Set Generation  
+**Script**: `langchain_eval_golden_testset.py`
+- Uses RAGAS to automatically generate diverse test questions
+- Creates ground-truth answers and reference contexts
+- Uploads datasets to Phoenix for experiment tracking
+- **You get**: A reusable test set for consistent evaluation
+
+### 📊 Stage 3: Automated Evaluation
+**Script**: `langchain_eval_experiments.py`
+- Runs all strategies against the golden test set
+- Calculates QA correctness and relevance metrics
+- Provides quantitative rankings and performance data
+- **You discover**: Which strategy objectively performs best
+
+🔄 **All three stages work together** to give you a complete evaluation workflow from setup to metrics!
 
 ---
 
@@ -68,10 +100,29 @@ docker-compose up -d  # Or use individual docker run commands below
 # 3. Install and run manually
 uv venv --python 3.13 && source .venv/bin/activate
 uv sync
-python src.langchain_eval_foundations_e2e.py
-python src.langchain_eval_golden_testset.py
-python src.langchain_eval_experiments.py
+python src/langchain_eval_foundations_e2e.py
+python src/langchain_eval_golden_testset.py
+python src/langchain_eval_experiments.py
 ```
+
+## 🌉 Next Steps: Deepen Your Understanding
+
+Now that you've got the pipeline running, here's where to go next:
+
+### 📖 **For Technical Deep Dives**
+- **[DeepWiki Documentation](https://deepwiki.com/donbr/rag-eval-foundations)**: Interactive architecture diagrams, detailed retrieval strategy analysis, and performance benchmarks
+- **[Technical Blog Post](docs/blog/langchain_eval_foundations_e2e_blog.md)**: Complete walkthrough of the implementation with code examples
+
+### 🧪 **For Hands-On Exploration**
+- **[Validation Scripts](validation/README.md)**: Interactive tools to explore your data and compare strategies
+  - `postgres_data_analysis.py`: Visualize embeddings and chunking strategies
+  - `retrieval_strategy_comparison.py`: Benchmark and compare all 6 strategies
+  - `validate_telemetry.py`: Understand Phoenix tracing in depth
+
+### 🚀 **For Production Readiness**
+- Learn about [RAGAS golden test sets](https://docs.ragas.io/) for automated evaluation
+- Explore [Phoenix documentation](https://docs.arize.com/phoenix) for advanced observability
+- Check out [LangChain's retriever docs](https://python.langchain.com/docs/modules/data_connection/retrievers/) for custom implementations
 
 ## 🎯 Pipeline Orchestration Script
 
@@ -225,7 +276,7 @@ This starts both PostgreSQL and Phoenix with the correct settings.
 
 ### Launch Sequence
 ```bash
-python src.langchain_eval_foundations_e2e.py
+python src/langchain_eval_foundations_e2e.py
 ```
 
 **What should happen:**
@@ -305,18 +356,22 @@ find . -type d -name __pycache__ -exec rm -rf {} +
 - ✅ PostgreSQL has tables full of John Wick wisdom
 - ✅ You feel like a wizard who just summoned 6 different search spirits
 
-### What You've Actually Accomplished:
-- Built the **foundation** for a production-ready RAG evaluation system
-- Learned how different retrieval strategies behave (the real education!)
-- Compared naive vector search against ensemble methods *by feel*
-- Set up observability that shows you what's happening under the hood
-- **Most importantly:** Got comfortable with LangChain's retriever ecosystem
+### What You've Actually Built:
+- ✅ **Complete 3-stage evaluation pipeline** from infrastructure to automated metrics
+- ✅ **6 retrieval strategies** implemented and ready for comparison
+- ✅ **RAGAS golden test sets** for consistent, repeatable evaluation
+- ✅ **Automated scoring** with QA correctness and relevance metrics
+- ✅ **Phoenix observability** tracking every operation and experiment
+- ✅ **Production-ready foundation** that you can extend for your use case
 
-### What's Coming Next (The Real Fun):
-- **Golden test sets** with RAGAS (ground truth questions and answers)
-- **Structured evaluation metrics** (precision, recall, hallucination detection)
-- **Automated scoring** that doesn't require human eyeballs
-- **Production-ready pipelines** that run evaluation on every code change
+🔍 **Deep dive into retrieval strategies:** See [DeepWiki's technical comparison](https://deepwiki.com/donbr/rag-eval-foundations) for detailed performance analysis and architecture insights.
+
+### Your Complete Toolkit Includes:
+- **Stage 1**: Infrastructure setup and manual strategy comparison
+- **Stage 2**: RAGAS-powered golden test set generation
+- **Stage 3**: Automated experiments with objective metrics
+- **Validation Scripts**: Interactive tools for deeper analysis
+- **Phoenix Integration**: Full observability and experiment tracking
 
 ---
 
@@ -324,11 +379,15 @@ find . -type d -name __pycache__ -exec rm -rf {} +
 
 Remember: every AI engineer has been exactly where you are right now. The difference between a beginner and an expert isn't that experts don't encounter errors—it's that they've learned to Google them more effectively.
 
-**You're not building the final pipeline yet** - you're learning the vocabulary. Understanding how BM25 differs from semantic search, why ensemble methods matter, and what Phoenix traces tell you about retriever performance. This foundational knowledge is what separates engineers who can copy-paste code from those who can architect real solutions.
+**You're building a complete evaluation pipeline** while learning the vocabulary. Understanding how BM25 differs from semantic search, why ensemble methods matter, and what Phoenix traces tell you about retriever performance. This hands-on experience is what separates engineers who can copy-paste code from those who can architect real solutions. ([Learn more about retrieval strategies →](https://deepwiki.com/donbr/rag-eval-foundations))
 
-You're not just running code; you're learning to **think in retrievers**. John Wick would be proud.
+You're not just running code; you're learning to **think in retrievers** with a complete toolkit at your disposal. John Wick would be proud.
 
-**Next mission:** Once this foundation is solid, you'll be ready for the real magic - generating golden test sets with RAGAS and building automated evaluation foundations that tell you *objectively* which retrieval strategy wins.
+**What's next for you:** Now that you have the complete pipeline, you can:
+- Customize evaluation metrics for your domain
+- Add new retrieval strategies to compare
+- Scale to larger datasets
+- Integrate into CI/CD for continuous evaluation
 
 *Now go forth and retrieve! The vectors are waiting.* 🎯
 
@@ -336,11 +395,22 @@ You're not just running code; you're learning to **think in retrievers**. John W
 
 ## 📚 Additional Resources
 
+### 📍 Documentation Map
+
+Navigate our comprehensive documentation based on your needs:
+
+| Document | Purpose | Best For |
+|----------|---------|----------|
+| **[This README](README.md)** | Quick start, setup, troubleshooting | Getting started, practical usage |
+| **[Technical Journey](docs/technical/langchain_eval_learning_journey.md)** | Detailed 3-stage progression guide | Understanding the complete pipeline |
+| **[Blog Post](docs/blog/langchain_eval_foundations_e2e_blog.md)** | Deep dive into Stage 1 implementation | Learning retrieval strategies in depth |
+| **[DeepWiki](https://deepwiki.com/donbr/rag-eval-foundations)** | Interactive Q&A and exploration | Quick answers, architecture insights |
+
 ### Understanding the Code
 - **Main Scripts:**
-  - `langchain_eval_foundations_e2e.py` - The main evaluation pipeline
-  - `langchain_eval_golden_testset.py` - Generate RAGAS golden test sets
-  - `langchain_eval_experiments.py` - Experimental features
+  - `langchain_eval_foundations_e2e.py` - Stage 1: Foundation & infrastructure
+  - `langchain_eval_golden_testset.py` - Stage 2: RAGAS golden test set generation
+  - `langchain_eval_experiments.py` - Stage 3: Automated evaluation & metrics
   - `data_loader.py` - Utilities for loading data
 
 ### Architecture Diagrams
@@ -348,6 +418,7 @@ You're not just running code; you're learning to **think in retrievers**. John W
 - **Viewing:** Use VS Code Excalidraw extension or [excalidraw.com](https://excalidraw.com/)
 - **Exports:** PNG/SVG versions in `diagrams/exports/` (when available)
 - **Current Status:** Work in progress - see `diagrams/README.md` for details
+- **Interactive Diagrams:** View system architecture and data flow diagrams on [DeepWiki](https://deepwiki.com/donbr/rag-eval-foundations)
 
 ## 🔍 Validation & Analysis Tools
 
@@ -363,6 +434,8 @@ python claude_code_scripts/run_rag_evaluation_pipeline.py
 ```
 
 ### Available Validation Scripts
+
+💡 **Tip**: These scripts provide hands-on exploration of concepts covered in the [DeepWiki technical documentation](https://deepwiki.com/donbr/rag-eval-foundations).
 
 #### 1. PostgreSQL Data Analysis
 ```bash
@@ -413,6 +486,12 @@ python validation/retrieval_strategy_comparison.py
 - Retrieval comparison: 30-60 seconds
 - Total runtime: 2-5 minutes
 
+📈 **For detailed performance analysis**: Check out [DeepWiki's performance insights](https://deepwiki.com/donbr/rag-eval-foundations) including:
+- Strategy-by-strategy latency comparisons
+- Token usage optimization techniques
+- Scaling recommendations for larger datasets
+- Cost-performance trade-offs for each retrieval method
+
 ### Glossary
 - **RAG**: Retrieval-Augmented Generation - enhancing LLM responses with retrieved context
 - **Embeddings**: Vector representations of text for semantic search
@@ -421,6 +500,8 @@ python validation/retrieval_strategy_comparison.py
 - **Phoenix**: Open-source LLM observability platform by Arize
 - **pgvector**: PostgreSQL extension for vector similarity search
 - **RAGAS**: Framework for evaluating RAG pipelines
+
+🔍 **Want to understand these concepts in depth?** Visit [DeepWiki](https://deepwiki.com/donbr/rag-eval-foundations) for interactive explanations and examples.
 
 ---
 
@@ -439,4 +520,16 @@ python validation/retrieval_strategy_comparison.py
 
 ---
 
+## 🌐 DeepWiki: Your Interactive Documentation Portal
+
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/donbr/rag-eval-foundations)
+
+**DeepWiki provides an AI-powered interface to explore this project in depth.** Ask questions, get instant answers, and discover:
+
+- 🏗️ **System Architecture**: Interactive diagrams showing how all components connect
+- 📊 **Performance Analysis**: Detailed benchmarks comparing all 6 retrieval strategies
+- 🔧 **Configuration Deep Dives**: Advanced settings and optimization techniques
+- 💡 **Implementation Insights**: Code explanations and design decisions
+- 🚀 **Scaling Strategies**: How to adapt this foundation for production use
+
+Perfect for when you need quick answers or want to explore specific technical aspects without diving through all the code.

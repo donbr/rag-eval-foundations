@@ -7,7 +7,7 @@ Evaluating Retrieval-Augmented Generation (RAG) systems presents unique challeng
 3. **PostgreSQL + pgvector**  
 4. **Arize Phoenix Observability**  
 
-Subsequent posts will focus on creating golden test sets (e.g., via RAGAS) and running automated evaluation metrics. Consider this your “Chapter 1” in the RAG evaluation journey.
+This post focuses on Stage 1 of our complete 3-stage evaluation pipeline. The full implementation includes RAGAS golden test set generation (Stage 2) and automated evaluation experiments (Stage 3), all available in the [project repository](https://github.com/donbr/rag-eval-foundations). For a comprehensive overview of the entire journey, see the [technical documentation](../technical/langchain_eval_learning_journey.md).
 
 ---
 

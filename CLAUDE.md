@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a RAG (Retrieval-Augmented Generation) evaluation framework that compares different retrieval strategies using John Wick movie reviews. The project serves as a foundation for learning LangChain's retriever ecosystem before implementing automated evaluation with RAGAS golden test sets.
+This is a complete 3-stage RAG (Retrieval-Augmented Generation) evaluation pipeline that compares different retrieval strategies using John Wick movie reviews. The project implements a full toolkit including infrastructure setup, RAGAS golden test set generation, and automated evaluation with metrics.
 
 ## Key Commands
 
@@ -22,6 +22,8 @@ uv sync
 ```
 
 ### Running the Application
+
+The application provides a complete 3-stage evaluation pipeline from infrastructure through automated metrics.
 
 #### Complete Pipeline (Recommended)
 ```bash
@@ -117,9 +119,10 @@ This prevents conflicts with other projects' containers.
    - **Multi-Query**: Generates query variations for broader coverage
    - **Ensemble**: Combines all strategies with equal weights (25% each)
 
-3. **Evaluation Pipeline**: 
-   - Uses RAGAS to generate golden test questions
-   - Compares retrieval strategies against these questions
+3. **Complete 3-Stage Evaluation Pipeline**: 
+   - **Stage 1**: Infrastructure setup and manual strategy comparison
+   - **Stage 2**: RAGAS golden test set generation
+   - **Stage 3**: Automated evaluation with metrics and experiments
    - Traces all operations with Phoenix for debugging
 
 ### Retrieval Strategy Details
@@ -281,9 +284,9 @@ The `run_rag_evaluation_pipeline.py` script provides:
 
 ### Next Steps
 
-This foundation prepares for:
-1. **Golden Test Sets**: Generate domain-specific evaluation questions
-2. **Automated Metrics**: Implement RAGAS scoring pipeline
-3. **A/B Testing**: Compare retrieval strategies systematically
-4. **Production Pipeline**: CI/CD integration with evaluation gates
-5. **Custom Retrievers**: Domain-specific retrieval strategies
+With this complete pipeline, you can:
+1. **Customize Evaluation**: Add domain-specific test questions and metrics
+2. **Extend Retrievers**: Implement custom retrieval strategies for your use case
+3. **Scale Up**: Adapt the pipeline for larger datasets and production use
+4. **CI/CD Integration**: Add evaluation gates to your deployment pipeline
+5. **Fine-tune Performance**: Optimize retrieval weights and parameters based on metrics

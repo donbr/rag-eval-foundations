@@ -94,17 +94,17 @@ This script completes the evaluation pipeline by automating the testing process 
 
 ## The Learning Progression
 
-### Stage 1: Manual Foundation (foundations_e2e.py)
+### Stage 1: Manual Foundation (langchain_eval_foundations_e2e.py)
 - **Focus**: Infrastructure and implementation
 - **Output**: Visual comparison of retrieval strategies
 - **Skills**: Vector databases, retrieval methods, observability
 
-### Stage 2: Test Set Creation (golden_testset.py)
+### Stage 2: Test Set Creation (langchain_eval_golden_testset.py)
 - **Focus**: Evaluation data preparation
 - **Output**: Reusable golden test set
 - **Skills**: RAGAS, test generation, dataset management
 
-### Stage 3: Automated Evaluation (experiments.py)
+### Stage 3: Automated Evaluation (langchain_eval_experiments.py)
 - **Focus**: Systematic experimentation
 - **Output**: Quantitative metrics and rankings
 - **Skills**: Custom evaluators, experiment tracking, metrics analysis
@@ -130,13 +130,13 @@ After mastering these three scripts, consider:
 
 ```bash
 # 1. Set up infrastructure and compare strategies
-python src.langchain_eval_foundations_e2e.py
+python src/langchain_eval_foundations_e2e.py
 
 # 2. Generate golden test set
-python src.langchain_eval_golden_testset.py
+python src/langchain_eval_golden_testset.py
 
 # 3. Run automated experiments
-python src.langchain_eval_experiments.py
+python src/langchain_eval_experiments.py
 ```
 
 ## Key Concepts to Master
