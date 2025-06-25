@@ -436,3 +436,7 @@ python validation/retrieval_strategy_comparison.py
 
 ## 📚 Appendix: Useful Links
 - **[uv Documentation](https://docs.astral.sh/uv/)**: Learn more about the fast Python package and project manager used in this guide.
+
+---
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/donbr/rag-eval-foundations)
