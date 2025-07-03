@@ -29,3 +29,10 @@ dependencies = [
     "seaborn>=0.13.2",
     "sqlalchemy",
 ]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.16.1",
+    "pytest>=8.4.1",
+    "ruff>=0.12.1",
+]

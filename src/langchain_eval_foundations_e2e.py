@@ -73,6 +73,9 @@ class Config:
     load_pdfs: bool = True  # Flag to enable/disable PDF loading
     load_csvs: bool = False  # Flag to enable/disable CSV loading (disabled for PDF-only processing)
     
+    # Golden test set settings
+    golden_testset_size: int = 10  # Number of examples to generate in RAGAS golden test set
+    
     def __post_init__(self):
         if self.data_urls is None:
             self.data_urls = [

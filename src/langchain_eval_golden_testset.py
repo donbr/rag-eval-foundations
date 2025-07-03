@@ -6,6 +6,7 @@ from datetime import datetime
 import pandas as pd
 from dotenv import load_dotenv
 from data_loader import load_docs_from_postgres
+from langchain_eval_foundations_e2e import Config, setup_environment
 
 import phoenix as px
 
@@ -64,21 +65,23 @@ def upload_to_phoenix(golden_testset, dataset_name: str = "mixed_golden_testset"
 
 def main():
 
-    load_dotenv()
-    os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY", "")
-    os.environ["COHERE_API_KEY"] = os.getenv("COHERE_API_KEY", "")
+    # Setup configuration using the centralized config system
+    config = setup_environment()
 
-    llm = ChatOpenAI(model="gpt-4.1-mini")
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+    llm = ChatOpenAI(model=config.model_name)
+    embeddings = OpenAIEmbeddings(model=config.embedding_model)
     generator_llm = LangchainLLMWrapper(llm)
     generator_embeddings = LangchainEmbeddingsWrapper(embeddings)
 
-    all_review_docs = load_docs_from_postgres("mixed_baseline_documents")
+    all_review_docs = load_docs_from_postgres(config.table_baseline)
     print(f"📊 Loaded {len(all_review_docs)} documents from database")
 
-    # Reduce testset size to 2 for mixed content (PDFs + CSVs)
+    # Use configurable testset size with environment variable override
+    testset_size = int(os.getenv("GOLDEN_TESTSET_SIZE", config.golden_testset_size))
+    print(f"🧪 Generating golden test set with {testset_size} examples")
+    
     golden_testset = generate_testset(
-        all_review_docs, generator_llm, generator_embeddings, 2
+        all_review_docs, generator_llm, generator_embeddings, testset_size
     )
 
     dataset_result = upload_to_phoenix(golden_testset, dataset_name="mixed_golden_testset")

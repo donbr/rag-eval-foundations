@@ -341,6 +341,7 @@ Examples:
     python claude_code_scripts/run_rag_evaluation_pipeline.py                    # Standard execution
     python claude_code_scripts/run_rag_evaluation_pipeline.py --verbose          # Debug logging
     python claude_code_scripts/run_rag_evaluation_pipeline.py --skip-services    # Skip Docker service check
+    python claude_code_scripts/run_rag_evaluation_pipeline.py --testset-size 5   # Generate 5 test examples
         """
     )
     parser.add_argument(
@@ -352,6 +353,12 @@ Examples:
         "--verbose", 
         action="store_true", 
         help="Enable verbose debug logging"
+    )
+    parser.add_argument(
+        "--testset-size",
+        type=int,
+        default=None,
+        help="Number of examples to generate in golden test set (overrides config default)"
     )
     args = parser.parse_args()
     
@@ -397,6 +404,11 @@ Examples:
     
     # Step 3: Pipeline execution
     logger.info("\n🚀 Step 3: Pipeline Execution")
+    
+    # Set testset size environment variable if specified
+    if args.testset_size is not None:
+        os.environ["GOLDEN_TESTSET_SIZE"] = str(args.testset_size)
+        logger.info(f"🧪 Setting golden test set size to {args.testset_size} examples")
     
     # Define the pipeline steps
     pipeline_steps = [

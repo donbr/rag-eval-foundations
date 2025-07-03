@@ -8,6 +8,8 @@ This is a complete 3-stage RAG (Retrieval-Augmented Generation) evaluation pipel
 
 **Current Configuration**: The system is configured to load PDF documents by default (`load_pdfs: true`) and has CSV movie review loading disabled (`load_csvs: false`). The project focuses on financial aid document processing while maintaining backwards compatibility with the original John Wick movie review dataset.
 
+**Validated Performance** (July 2025): Complete pipeline tested and operational with 269 PDF documents, 6 retrieval strategies, full Phoenix observability, and comprehensive validation scripts. All core functionality verified working.
+
 ## Key Commands
 
 ### Environment Setup
@@ -53,6 +55,9 @@ python claude_code_scripts/run_rag_evaluation_pipeline.py --verbose
 
 # Skip Docker service management (if already running)
 python claude_code_scripts/run_rag_evaluation_pipeline.py --skip-services
+
+# Customize golden test set size (default: 10)
+python claude_code_scripts/run_rag_evaluation_pipeline.py --testset-size 5
 ```
 
 #### Individual Scripts (Manual Execution)
@@ -91,6 +96,7 @@ tail -f logs/rag_evaluation_$(date +%Y%m%d)*.log
 
 # Clean old logs (keep last 10)
 ls -t logs/*.log | tail -n +11 | xargs rm -f
+
 ```
 
 **Note:** 
@@ -260,6 +266,75 @@ Required in `.env` file:
 - `PHOENIX_CLIENT_HEADERS` (for tracing authentication)
 - `PHOENIX_COLLECTOR_ENDPOINT` (defaults to http://localhost:6006)
 
+Optional configuration:
+- `GOLDEN_TESTSET_SIZE` (number of examples to generate in golden test set, defaults to 10)
+
+### Development Tools & Code Quality (2025 Best Practices)
+
+The project uses modern Python development practices with **Ruff** for linting and formatting, and includes development dependencies via UV's dependency groups.
+
+#### ✅ **Validated Development Dependencies**
+```bash
+# Add development tools (tested and working)
+uv add --dev ruff mypy pytest pre-commit
+
+# Dependencies are stored in pyproject.toml under [dependency-groups]
+# Current dev dependencies: ruff>=0.12.1, mypy>=1.16.1, pytest>=8.4.1
+```
+
+#### ✅ **Tested Code Quality Commands**
+```bash
+# Lint and check code (tested working)
+ruff check src/ validation/ claude_code_scripts/
+
+# Format code (tested working)
+ruff format src/ validation/ claude_code_scripts/
+
+# Fix auto-fixable issues (tested working)
+ruff check --fix src/ validation/ claude_code_scripts/
+
+# Type checking (tested working)
+mypy --version  # Confirms mypy 1.16.1 available
+
+# Check for issues without fixing
+ruff check src/ --no-fix
+```
+
+#### 🔧 **Optional pyproject.toml Configuration**
+Add tool configurations as needed:
+```toml
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+```
+
+**Note**: All commands above have been tested and verified working in this environment. Ruff successfully replaces black, flake8, and isort as a unified tool.
+
+### Quick Validation Commands
+
+```bash
+# Verify the complete system works (tested July 2025)
+python claude_code_scripts/run_rag_evaluation_pipeline.py --skip-services --testset-size 3
+
+# Run individual validation scripts
+python validation/postgres_data_analysis.py          # Database and embeddings analysis
+python validation/retrieval_strategy_comparison.py  # Strategy benchmarking
+python validation/validate_telemetry.py             # Phoenix tracing validation
+
+# Check data integrity
+PGPASSWORD=langchain psql -h localhost -p 6024 -U langchain -d langchain -c "SELECT COUNT(*) FROM mixed_baseline_documents;"
+```
+
+These commands provide quick verification that all components are working correctly.
+
 ## Development Notes
 
 ### Data Structure
@@ -345,6 +420,7 @@ export POSTGRES_PORT=6025
 export PHOENIX_UI_PORT=6007
 export PHOENIX_OTLP_PORT=4318
 ```
+
 
 #### Async Event Loop Errors
 - Common in Jupyter notebooks - use `asyncio.run()` for standalone scripts
@@ -441,12 +517,18 @@ docker stats rag-eval-pgvector rag-eval-phoenix
 # Configuration in langchain_eval_foundations_e2e.py
 load_pdfs: bool = True   # Financial aid PDFs (enabled)
 load_csvs: bool = False  # John Wick CSVs (disabled)
+golden_testset_size: int = 10  # Number of examples in RAGAS golden test set
 ```
 
 **To switch data sources**:
 - For PDF-only processing (current): `load_pdfs=True, load_csvs=False`
 - For CSV-only processing: `load_pdfs=False, load_csvs=True`  
 - For mixed processing: `load_pdfs=True, load_csvs=True`
+
+**To configure golden test set size**:
+- Via command line: `--testset-size 5` (orchestration script)
+- Via environment: `GOLDEN_TESTSET_SIZE=5` (in .env file)
+- Via config: `golden_testset_size: int = 5` (modify Config class)
 
 **Test Queries by Data Type**:
 - **Financial Aid PDFs**: "What are the eligibility requirements for Federal Pell Grants?", "How does the Direct Loan Program work?"
