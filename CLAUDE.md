@@ -29,7 +29,7 @@ source .venv/bin/activate  # On Unix/macOS
 uv sync
 
 # Verify critical dependencies
-python -c "import langchain, openai, cohere, ragas, pypdf, matplotlib, seaborn; print('Dependencies verified')"
+python -c "import langchain, openai, cohere, ragas, pypdf, matplotlib, seaborn, psycopg2, asyncpg; print('All dependencies verified')"
 ```
 
 **Key Dependencies** (automatically installed via `uv sync`):
@@ -70,16 +70,27 @@ python src/langchain_eval_experiments.py
 python validation/retrieval_strategy_comparison.py
 ```
 
-#### Validation & Analysis Scripts
+#### Validation & Testing Commands
 ```bash
-# PostgreSQL data analysis with visualizations
-python validation/postgres_data_analysis.py
+# Essential validation sequence (run after main pipeline)
+python validation/postgres_data_analysis.py        # Database analysis
+python validation/retrieval_strategy_comparison.py # Strategy benchmarking  
+python validation/validate_telemetry.py           # Phoenix tracing validation
 
-# Phoenix telemetry and tracing validation  
-python validation/validate_telemetry.py
+# Dependency verification
+python -c "import langchain, openai, cohere, ragas, pypdf, matplotlib, seaborn, psycopg2, asyncpg; print('All dependencies verified')"
+```
 
-# Interactive retrieval strategy comparison
-python validation/retrieval_strategy_comparison.py
+#### Log Management
+```bash
+# View recent pipeline logs
+ls -la logs/
+
+# View latest pipeline execution
+tail -f logs/rag_evaluation_$(date +%Y%m%d)*.log
+
+# Clean old logs (keep last 10)
+ls -t logs/*.log | tail -n +11 | xargs rm -f
 ```
 
 **Note:** 
