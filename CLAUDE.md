@@ -4,12 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a complete 3-stage RAG (Retrieval-Augmented Generation) evaluation pipeline that compares different retrieval strategies using John Wick movie reviews. The project implements a full toolkit including infrastructure setup, RAGAS golden test set generation, and automated evaluation with metrics.
+This is a complete 3-stage RAG (Retrieval-Augmented Generation) evaluation pipeline that compares different retrieval strategies using **financial aid PDF documents** as the primary data source. The project implements a full toolkit including infrastructure setup, RAGAS golden test set generation, and automated evaluation with metrics.
+
+**Current Configuration**: The system is configured to load PDF documents by default (`load_pdfs: true`) and has CSV movie review loading disabled (`load_csvs: false`). The project focuses on financial aid document processing while maintaining backwards compatibility with the original John Wick movie review dataset.
 
 ## Key Commands
 
 ### Environment Setup
+
+**IMPORTANT**: This project requires Python 3.13+ and uses `uv` for package management.
+
 ```bash
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
 # Create virtual environment with Python 3.13
 uv venv --python 3.13
 
@@ -17,12 +25,19 @@ uv venv --python 3.13
 source .venv/bin/activate  # On Unix/macOS
 .venv\Scripts\activate     # On Windows
 
-# Install dependencies
+# Install dependencies from pyproject.toml
 uv sync
 
 # Verify critical dependencies
-python -c "import langchain, openai, cohere, ragas; print('Dependencies verified')"
+python -c "import langchain, openai, cohere, ragas, pypdf, matplotlib, seaborn; print('Dependencies verified')"
 ```
+
+**Key Dependencies** (automatically installed via `uv sync`):
+- LangChain ecosystem (core, openai, cohere, postgres, experimental)
+- Phoenix observability with OpenTelemetry instrumentation
+- PDF processing (pypdf) and visualization (matplotlib, seaborn)
+- Vector database support (asyncpg, psycopg2-binary)
+- Machine learning utilities (rank_bm25, rapidfuzz)
 
 ### Running the Application
 
@@ -67,7 +82,10 @@ python validation/validate_telemetry.py
 python validation/retrieval_strategy_comparison.py
 ```
 
-**Note:** Run the main pipeline first to populate data before using validation scripts.
+**Note:** 
+- Run the main pipeline first to populate data before using validation scripts
+- Validation scripts are updated to work with the current PDF-based data (financial aid documents)
+- Scripts generate visualizations in `outputs/charts/` with data distributions, embedding analysis, and performance comparisons
 
 ### Required Services
 
@@ -145,7 +163,8 @@ docker run -it --rm --name phoenix-container \
 ### Core Components
 
 1. **Data Pipeline**: 
-   - CSV ingestion from John Wick movie reviews
+   - **Primary**: PDF document ingestion from financial aid sources (4 documents, ~269 pages)
+   - **Secondary**: CSV ingestion from John Wick movie reviews (optional, disabled by default)
    - Async document processing with metadata enrichment
    - PostgreSQL/pgvector storage with 1536-dimension embeddings
    
@@ -211,6 +230,9 @@ docker run -it --rm --name phoenix-container \
 - **Cohere API**: Reranking with rerank-english-v3.0 model
 - **PostgreSQL + pgvector**: Vector similarity search with SQL capabilities
 - **Phoenix (Arize)**: OpenTelemetry-based LLM observability
+- **RAGAS**: RAG evaluation framework with golden test set generation
+- **PyPDF**: PDF document loading and processing
+- **Matplotlib/Seaborn**: Data visualization for analysis scripts
 
 #### Design Patterns
 - **Configuration Dataclass**: Centralized `Config` class with environment overrides
@@ -230,10 +252,20 @@ Required in `.env` file:
 ## Development Notes
 
 ### Data Structure
-- Reviews stored in `data/john_wick_[1-4].csv`
+**Primary Data (PDF Documents)**:
+- Financial aid PDFs stored in `data/` directory:
+  - `Academic_Calenders_Cost_of_Attendance_and_Packaging.pdf`
+  - `Applications_and_Verification_Guide.pdf`
+  - `The_Direct_Loan_Program.pdf`
+  - `The_Federal_Pell_Grant_Program.pdf`
+- Document metadata: `document_name`, `source_type`, `last_accessed_at`
+- Tables: `mixed_baseline_documents` and `mixed_semantic_documents`
+
+**Secondary Data (CSV, Optional)**:
+- Movie reviews stored in `data/john_wick_[1-4].csv`
 - Each review contains: Review_Title, Review_Text, Rating, Movie_Title
 - Metadata includes: Review_Date, Author, Review_Url, last_accessed_at
-- Golden test set in `data/johnwick_golden_testset_phoenix.json`
+- Golden test set in `data/mixed_golden_testset_phoenix.json`
 
 ### Phoenix Observability
 
@@ -263,10 +295,10 @@ The framework supports both reference-free evaluation (using LLMs) and golden da
 psql -h localhost -p 6024 -U langchain -d langchain -c "\dt"
 
 # Check table contents
-psql -h localhost -p 6024 -U langchain -d langchain -c "SELECT COUNT(*) FROM johnwick_baseline_documents;"
+psql -h localhost -p 6024 -U langchain -d langchain -c "SELECT COUNT(*) FROM mixed_baseline_documents;"
 
 # Verify embeddings are populated
-psql -h localhost -p 6024 -U langchain -d langchain -c "SELECT COUNT(*) FROM johnwick_baseline_documents WHERE embedding IS NOT NULL;"
+psql -h localhost -p 6024 -U langchain -d langchain -c "SELECT COUNT(*) FROM mixed_baseline_documents WHERE embedding IS NOT NULL;"
 ```
 
 #### API Rate Limits
@@ -390,6 +422,34 @@ docker stats rag-eval-pgvector rag-eval-phoenix
 
 **Refusing to run tests is unacceptable** - validation through execution is a core requirement for reliable code delivery.
 
+### Current Data Configuration
+
+**IMPORTANT**: The system is currently configured to load PDF documents by default:
+
+```python
+# Configuration in langchain_eval_foundations_e2e.py
+load_pdfs: bool = True   # Financial aid PDFs (enabled)
+load_csvs: bool = False  # John Wick CSVs (disabled)
+```
+
+**To switch data sources**:
+- For PDF-only processing (current): `load_pdfs=True, load_csvs=False`
+- For CSV-only processing: `load_pdfs=False, load_csvs=True`  
+- For mixed processing: `load_pdfs=True, load_csvs=True`
+
+**Test Queries by Data Type**:
+- **Financial Aid PDFs**: "What are the eligibility requirements for Federal Pell Grants?", "How does the Direct Loan Program work?"
+- **John Wick CSVs**: "What makes John Wick so effective as an assassin?", "How does the Continental Hotel operate?"
+
+### Cost Considerations
+
+**Budget Planning**: Be aware of API costs when running scripts:
+- **OpenAI**: ~$0.50-$2.00 per full pipeline run (depends on data size)
+- **Cohere**: ~$0.10-$0.50 for reranking operations
+- **Total**: Budget approximately $5 for experimentation and testing
+
+Monitor token usage through Phoenix traces to optimize costs during development.
+
 ### Pipeline Orchestration
 
 The `run_rag_evaluation_pipeline.py` script provides:
@@ -397,6 +457,14 @@ The `run_rag_evaluation_pipeline.py` script provides:
 - Comprehensive logging to `logs/` directory with timestamps
 - Environment validation and Docker service management
 - Progress tracking and execution summaries
+
+### External Documentation
+
+For additional context and deep-dive analysis:
+- **[DeepWiki Documentation](https://deepwiki.com/donbr/rag-eval-foundations)**: Interactive Q&A, architecture diagrams, and performance analysis
+- **[Technical Blog Post](docs/blog/langchain_eval_foundations_e2e_blog.md)**: Complete implementation walkthrough with code examples
+- **[Learning Journey](docs/technical/langchain_eval_learning_journey.md)**: Detailed 3-stage progression guide
+- **[Validation Scripts](validation/README.md)**: Interactive tools for data exploration and strategy comparison
 
 ### Next Steps
 

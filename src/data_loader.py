@@ -7,7 +7,7 @@ from typing import List
 
 logger = logging.getLogger(__name__)
 
-def load_docs_from_postgres(table_name: str = "johnwick_baseline_documents") -> List[Document]:
+def load_docs_from_postgres(table_name: str = "mixed_baseline_documents") -> List[Document]:
     """
     Loads documents from a PostgreSQL table into a list of LangChain Documents.
     """

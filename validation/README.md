@@ -20,13 +20,13 @@ This directory contains interactive scripts for exploring, testing, and validati
 **Purpose:** Comprehensive PostgreSQL vector database analysis
 
 **What it does:**
-- Analyzes document distribution across John Wick movies (25 reviews each)
+- Analyzes document distribution across financial aid PDF documents
 - Compares baseline chunking vs semantic chunking strategies
 - Generates PCA visualization of embeddings in 2D space
-- Shows content length statistics and rating distributions
+- Shows content length statistics and document type distributions
 
 **Outputs:**
-- `outputs/charts/postgres_analysis/rating_distribution.png`
+- `outputs/charts/postgres_analysis/document_distribution.png`
 - `outputs/charts/postgres_analysis/chunking_comparison.png` 
 - `outputs/charts/postgres_analysis/embedding_visualization.png`
 
@@ -53,13 +53,13 @@ This directory contains interactive scripts for exploring, testing, and validati
 
 **What it does:**
 - Compares naive, semantic, BM25, compression, multiquery, and ensemble retrievers
-- Tests with different query types (sentiment, specific aspects, complex questions)
+- Tests with financial aid queries (eligibility, loan programs, verification processes)
 - Runs performance benchmarks measuring speed and document retrieval
-- Generates side-by-side strategy comparisons
+- Generates side-by-side strategy comparisons for financial aid content
 
 **Outputs:**
 - `outputs/charts/retrieval_analysis/retrieval_performance.png`
-- Detailed console output showing retrieved documents per strategy
+- Detailed console output showing retrieved PDF document chunks per strategy
 - Performance statistics and timing comparisons
 
 **Run time:** ~3-5 minutes
@@ -89,11 +89,11 @@ python validation/retrieval_strategy_comparison.py
 ## What Each Script Validates
 
 ### Database Integrity (`postgres_data_analysis.py`)
-- ✅ Vector store contains expected 100 documents
-- ✅ Documents are evenly distributed across movies
+- ✅ Vector store contains PDF documents from financial aid sources
+- ✅ Documents are distributed across 4 financial aid PDF files
 - ✅ Embeddings are properly generated (1536 dimensions)
-- ✅ Semantic chunking creates appropriate chunk sizes
-- ✅ Metadata is correctly preserved
+- ✅ Semantic chunking creates appropriate chunk sizes (2.25x chunking ratio)
+- ✅ PDF metadata is correctly preserved (document_name, source_type)
 
 ### Tracing & Observability (`validate_telemetry.py`)
 - ✅ Phoenix tracing captures LLM operations

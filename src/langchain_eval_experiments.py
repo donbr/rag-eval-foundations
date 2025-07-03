@@ -117,7 +117,7 @@ async def main():
 
     # Connect to Phoenix and get the dataset
     px_client = px.Client()
-    dataset = px_client.get_dataset(name="johnwick_golden_testset")
+    dataset = px_client.get_dataset(name="mixed_golden_testset")
     
     print(f"📊 Dataset loaded: {dataset}")
     print(f"📊 Total examples: {len(list(dataset.examples))}")
@@ -149,8 +149,8 @@ Context:
     POSTGRES_HOST     = "localhost"
     POSTGRES_PORT     = "6024"
     POSTGRES_DB       = "langchain"
-    TABLE_BASELINE    = "johnwick_baseline_documents"
-    TABLE_SEMANTIC    = "johnwick_semantic_documents"
+    TABLE_BASELINE    = "mixed_baseline_documents"
+    TABLE_SEMANTIC    = "mixed_semantic_documents"
 
     async_url = (
         f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}"

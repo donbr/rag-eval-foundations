@@ -71,13 +71,13 @@ async def initialize_models_and_stores():
     # Connect to vector stores
     baseline_vectorstore = await PGVectorStore.create(
         engine=pg_engine,
-        table_name="johnwick_baseline_documents",
+        table_name="mixed_baseline_documents",
         embedding_service=embeddings,
     )
     
     semantic_vectorstore = await PGVectorStore.create(
         engine=pg_engine,
-        table_name="johnwick_semantic_documents",
+        table_name="mixed_semantic_documents",
         embedding_service=embeddings,
     )
     
@@ -90,7 +90,7 @@ def load_documents_for_bm25(baseline_vectorstore):
     print("\nLoading documents for BM25...")
     
     # Retrieve documents using a broad query
-    dummy_query = "John Wick"
+    dummy_query = "financial aid"
     all_docs = baseline_vectorstore.similarity_search(dummy_query, k=100)
     
     print(f"✅ Loaded {len(all_docs)} documents for BM25")
@@ -156,8 +156,8 @@ async def compare_retrievers(query: str, retrievers: Dict) -> pd.DataFrame:
                     "Strategy": name,
                     "Rank": i + 1,
                     "Content": doc.page_content[:200] + "...",
-                    "Movie": doc.metadata.get("Movie_Title", "Unknown"),
-                    "Rating": doc.metadata.get("Rating", "N/A"),
+                    "Document": doc.metadata.get("document_name", "Unknown"),
+                    "Source": doc.metadata.get("source_type", "N/A"),
                     "Length": len(doc.page_content)
                 })
         except Exception as e:
@@ -165,8 +165,8 @@ async def compare_retrievers(query: str, retrievers: Dict) -> pd.DataFrame:
                 "Strategy": name,
                 "Rank": 1,
                 "Content": f"Error: {str(e)}",
-                "Movie": "Error",
-                "Rating": "Error",
+                "Document": "Error",
+                "Source": "Error",
                 "Length": 0
             })
     
@@ -182,7 +182,7 @@ def display_results(df: pd.DataFrame):
         strategy_results = df[df["Strategy"] == strategy]
         for _, row in strategy_results.iterrows():
             print(f"\nRank {row['Rank']}:")
-            print(f"Movie: {row['Movie']} | Rating: {row['Rating']} | Length: {row['Length']} chars")
+            print(f"Document: {row['Document']} | Source: {row['Source']} | Length: {row['Length']} chars")
             print(f"Content: {row['Content']}")
             print("-" * 40)
 
@@ -248,23 +248,23 @@ async def run_tests(retrievers, llm):
     print("RUNNING RETRIEVAL COMPARISONS")
     print("=" * 80)
     
-    # Test 1: General sentiment query
-    print("\n1. General Sentiment Query")
-    query1 = "Did people generally like John Wick?"
+    # Test 1: General eligibility query
+    print("\n1. General Eligibility Query")
+    query1 = "What are the eligibility requirements for Federal Pell Grants?"
     print(f"Query: {query1}")
     results1 = await compare_retrievers(query1, retrievers)
     display_results(results1)
     
-    # Test 2: Specific aspect query
-    print("\n\n2. Specific Aspect Query")
-    query2 = "How are the action scenes in John Wick?"
+    # Test 2: Specific process query
+    print("\n\n2. Specific Process Query")
+    query2 = "How does the Direct Loan Program work?"
     print(f"Query: {query2}")
     results2 = await compare_retrievers(query2, retrievers)
     display_results(results2)
     
     # Test 3: RAG pipeline comparison
     print("\n\n3. RAG Pipeline Comparison")
-    test_query = "What makes John Wick movies special compared to other action films?"
+    test_query = "What is the process for verifying financial aid applications?"
     print(f"Question: {test_query}\n")
     
     rag_responses = await compare_rag_responses(test_query, retrievers, llm)
@@ -278,7 +278,7 @@ async def run_tests(retrievers, llm):
     
     # Test 4: Performance benchmark
     print("\n\n4. Performance Benchmark")
-    benchmark_query = "What are the best action scenes in John Wick?"
+    benchmark_query = "What documents are needed for financial aid verification?"
     print(f"Benchmarking with query: {benchmark_query}")
     
     benchmark_df = await benchmark_retrievers(benchmark_query, retrievers)
@@ -340,11 +340,11 @@ async def main():
         print("ANALYSIS COMPLETE")
         print("=" * 80)
         print("\nKey Observations:")
-        print("1. Naive Vector Search: Good for semantic similarity but may miss keyword matches")
-        print("2. Semantic Chunking: Often provides more coherent chunks with better context")
-        print("3. BM25: Excellent for queries with specific keywords")
-        print("4. Contextual Compression: Reduces noise and improves precision")
-        print("5. Multi-Query: Helps with ambiguous queries by exploring variations")
+        print("1. Naive Vector Search: Good for semantic similarity in financial aid content")
+        print("2. Semantic Chunking: Provides more coherent document chunks with better context")
+        print("3. BM25: Excellent for specific financial aid term queries")
+        print("4. Contextual Compression: Reduces noise and improves precision for aid documents")
+        print("5. Multi-Query: Helps with ambiguous financial aid queries by exploring variations")
         print("6. Ensemble: Balances all approaches but may be slower")
         
         print("\n✅ All tests completed successfully!")

@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pandas as pd
 from dotenv import load_dotenv
-from src.data_loader import load_docs_from_postgres
+from data_loader import load_docs_from_postgres
 
 import phoenix as px
 
@@ -27,7 +27,7 @@ def generate_testset(
     return golden_testset
 
 
-def upload_to_phoenix(golden_testset, dataset_name: str = "johnwick_golden_testset") -> dict:
+def upload_to_phoenix(golden_testset, dataset_name: str = "mixed_golden_testset") -> dict:
     testset_df = golden_testset.to_pandas()
 
     phoenix_df = pd.DataFrame(
@@ -73,13 +73,15 @@ def main():
     generator_llm = LangchainLLMWrapper(llm)
     generator_embeddings = LangchainEmbeddingsWrapper(embeddings)
 
-    all_review_docs = load_docs_from_postgres("johnwick_baseline_documents")
+    all_review_docs = load_docs_from_postgres("mixed_baseline_documents")
+    print(f"📊 Loaded {len(all_review_docs)} documents from database")
 
+    # Reduce testset size to 2 for mixed content (PDFs + CSVs)
     golden_testset = generate_testset(
-        all_review_docs, generator_llm, generator_embeddings, 3
+        all_review_docs, generator_llm, generator_embeddings, 2
     )
 
-    dataset_result = upload_to_phoenix(golden_testset, dataset_name="johnwick_golden_testset")
+    dataset_result = upload_to_phoenix(golden_testset, dataset_name="mixed_golden_testset")
 
     print(f"🚀 Workflow completed. Phoenix upload status: {dataset_result['status']}")
 

@@ -16,6 +16,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_postgres import PGEngine, PGVectorStore
 from langchain_experimental.text_splitter import SemanticChunker
 from langchain_community.document_loaders.csv_loader import CSVLoader
+from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.runnables import RunnablePassthrough
 from operator import itemgetter
 from langchain_community.retrievers import BM25Retriever
@@ -59,8 +60,8 @@ class Config:
     postgres_port: str = "6024"
     postgres_db: str = "langchain"
     vector_size: int = 1536
-    table_baseline: str = "johnwick_baseline_documents"
-    table_semantic: str = "johnwick_semantic_documents"
+    table_baseline: str = "mixed_baseline_documents"
+    table_semantic: str = "mixed_semantic_documents"
     overwrite_existing_tables: bool = True
     
     # Model settings
@@ -69,6 +70,8 @@ class Config:
     
     # Data settings
     data_urls: List[tuple] = None
+    load_pdfs: bool = True  # Flag to enable/disable PDF loading
+    load_csvs: bool = False  # Flag to enable/disable CSV loading (disabled for PDF-only processing)
     
     def __post_init__(self):
         if self.data_urls is None:
@@ -159,47 +162,99 @@ def create_retrievers(baseline_vectorstore, semantic_vectorstore, all_docs, llm)
     
     return retrievers
 
+async def load_pdf_documents(data_dir: Path) -> List:
+    """Load PDF documents from the data directory"""
+    pdf_docs = []
+    pdf_files = list(data_dir.glob("*.pdf"))
+    
+    if not pdf_files:
+        logger.info("No PDF files found in data directory")
+        return pdf_docs
+    
+    logger.info(f"Found {len(pdf_files)} PDF files to load")
+    
+    for pdf_file in pdf_files:
+        try:
+            loader = PyPDFLoader(str(pdf_file))
+            docs = loader.load()
+            
+            # Add metadata for PDFs
+            for doc in docs:
+                doc.metadata.update({
+                    "source_type": "pdf",
+                    "document_name": pdf_file.stem,
+                    "last_accessed_at": datetime.now().isoformat()
+                })
+            
+            pdf_docs.extend(docs)
+            logger.info(f"Loaded {len(docs)} pages from {pdf_file.name}")
+            
+        except Exception as e:
+            logger.error(f"Error loading PDF {pdf_file.name}: {e}")
+            continue
+    
+    return pdf_docs
+
+
 async def load_and_process_data(config: "Config") -> List:
-    """Load and process John Wick movie review data"""
+    """Load and process both CSV and PDF data"""
     data_dir = Path.cwd() / "data"
     data_dir.mkdir(exist_ok=True)
     
     all_docs = []
+    csv_docs = []
+    pdf_docs = []
     
-    for idx, (url, filename) in enumerate(config.data_urls, start=1):
-        file_path = data_dir / filename
+    # Load CSV data (John Wick reviews) - only if enabled
+    if config.load_csvs:
+        logger.info("📥 Loading CSV data...")
+        for idx, (url, filename) in enumerate(config.data_urls, start=1):
+            file_path = data_dir / filename
         
-        # Download if not exists
-        if not file_path.exists():
+            # Download if not exists
+            if not file_path.exists():
+                try:
+                    response = requests.get(url)
+                    response.raise_for_status()
+                    file_path.write_bytes(response.content)
+                except requests.RequestException as e:
+                    logger.error(f"Error downloading {filename}: {e}")
+                    continue
+            
+            # Load documents
             try:
-                response = requests.get(url)
-                response.raise_for_status()
-                file_path.write_bytes(response.content)
-            except requests.RequestException as e:
-                logger.error(f"Error downloading {filename}: {e}")
+                loader = CSVLoader(
+                    file_path=file_path,
+                    metadata_columns=["Review_Date", "Review_Title", "Review_Url", "Author", "Rating"]
+                )
+                docs = loader.load()
+                
+                # Add metadata
+                for doc in docs:
+                    doc.metadata.update({
+                        "source_type": "csv",
+                        "Movie_Title": f"John Wick {idx}",
+                        "Rating": int(doc.metadata.get("Rating", 0) or 0),
+                        "last_accessed_at": (datetime.now() - timedelta(days=4 - idx)).isoformat()
+                    })
+                
+                csv_docs.extend(docs)
+                
+            except Exception as e:
+                logger.error(f"Error loading {filename}: {e}")
                 continue
         
-        # Load documents
-        try:
-            loader = CSVLoader(
-                file_path=file_path,
-                metadata_columns=["Review_Date", "Review_Title", "Review_Url", "Author", "Rating"]
-            )
-            docs = loader.load()
-            
-            # Add metadata
-            for doc in docs:
-                doc.metadata.update({
-                    "Movie_Title": f"John Wick {idx}",
-                    "Rating": int(doc.metadata.get("Rating", 0) or 0),
-                    "last_accessed_at": (datetime.now() - timedelta(days=4 - idx)).isoformat()
-                })
-            
-            all_docs.extend(docs)
-            
-        except Exception as e:
-            logger.error(f"Error loading {filename}: {e}")
-            continue
+        logger.info(f"Loaded {len(csv_docs)} CSV documents")
+        all_docs.extend(csv_docs)
+    
+    # Load PDF data if enabled
+    if config.load_pdfs:
+        logger.info("📄 Loading PDF data...")
+        pdf_docs = await load_pdf_documents(data_dir)
+        logger.info(f"Loaded {len(pdf_docs)} PDF documents")
+        all_docs.extend(pdf_docs)
+    
+    logger.info(f"📊 Total documents loaded: {len(all_docs)} (CSV: {len(csv_docs)}, PDF: {len(pdf_docs)})")
     
     return all_docs
 
@@ -235,20 +290,21 @@ async def run_evaluation(question: str, chains: Dict[str, Any]) -> Dict[str, str
 
 
 async def main():
-    """Main execution function"""
+    """Main execution function - loads both CSV and PDF documents for RAG evaluation"""
     try:
         # Setup
         config = setup_environment()
         tracer_provider = setup_phoenix_tracing(config)
 
         logger.info(f"✅ Phoenix tracing configured for project: {config.project_name}")
+        logger.info(f"📁 Table names: baseline='{config.table_baseline}', semantic='{config.table_semantic}'")
         
         # Initialize models
         llm = ChatOpenAI(model=config.model_name)
         embeddings = OpenAIEmbeddings(model=config.embedding_model)
         
         # Load data
-        logger.info("📥 Loading and processing data...")
+        logger.info("📥 Loading and processing documents from CSV and PDF sources...")
         all_docs = await load_and_process_data(config)
         
         if not all_docs:
@@ -283,7 +339,13 @@ async def main():
 
         # Run evaluation
         logger.info("🔍 Running evaluation...")
-        question = "Did people generally like John Wick?"
+        # Use questions appropriate for financial aid documents
+        test_questions = [
+            "What are the eligibility requirements for Federal Pell Grants?",
+            "How does the Direct Loan Program work?",
+            "What is the process for verifying financial aid applications?"
+        ]
+        question = test_questions[0]  # Start with the first question
         
         results = await run_evaluation(question, chains)
         
