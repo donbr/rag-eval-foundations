@@ -88,8 +88,12 @@ jobs:
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
           echo "should-run-integration=$ENABLE_INTEGRATION" >> $GITHUB_OUTPUT
 
+      - name: Install dependencies
+        run: uv sync --dev
+
       - name: Validate configuration
         run: |
+          source .venv/bin/activate
           # Validate tasks.yaml syntax
           python -c "
           import yaml

@@ -21,21 +21,23 @@ Example usage:
 """
 
 import asyncio
-import asyncpg
-import uuid
-from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional, Tuple
-from dataclasses import dataclass, field
-from enum import Enum
 import json
 import os
+import uuid
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from enum import Enum
 from pathlib import Path
+from typing import Any
+
+import asyncpg
 
 # Database connection utility
 sys_path = Path(__file__).parent.parent.parent / "scripts"
 import sys
+
 sys.path.insert(0, str(sys_path))
-from db_connection import DatabaseConnectionManager, ConnectionConfig
+from db_connection import ConnectionConfig, DatabaseConnectionManager
 
 # Import version types
 from .versioning import SemanticVersion
@@ -66,35 +68,35 @@ class ValidationStatus(Enum):
 @dataclass
 class GoldenExample:
     """Individual example in a golden testset"""
-    id: Optional[str] = None
+    id: str | None = None
     question: str = ""
     ground_truth: str = ""
-    contexts: List[str] = field(default_factory=list)
+    contexts: list[str] = field(default_factory=list)
 
     # RAGAS metadata
-    ragas_question_type: Optional[str] = None
-    ragas_evolution_type: Optional[str] = None
-    ragas_difficulty: Optional[float] = None
+    ragas_question_type: str | None = None
+    ragas_evolution_type: str | None = None
+    ragas_difficulty: float | None = None
 
     # Retrieval metadata
-    retrieval_strategy: Optional[str] = None
-    retrieval_score: Optional[float] = None
+    retrieval_strategy: str | None = None
+    retrieval_score: float | None = None
 
     # Quality metrics
-    context_precision: Optional[float] = None
-    context_recall: Optional[float] = None
-    faithfulness: Optional[float] = None
-    answer_relevancy: Optional[float] = None
+    context_precision: float | None = None
+    context_recall: float | None = None
+    faithfulness: float | None = None
+    answer_relevancy: float | None = None
 
     # Embeddings
-    question_embedding: Optional[List[float]] = None
-    ground_truth_embedding: Optional[List[float]] = None
+    question_embedding: list[float] | None = None
+    ground_truth_embedding: list[float] | None = None
 
     def __post_init__(self):
         if self.id is None:
             self.id = str(uuid.uuid4())
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization"""
         return {
             'id': self.id,
@@ -115,7 +117,7 @@ class GoldenExample:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'GoldenExample':
+    def from_dict(cls, data: dict[str, Any]) -> 'GoldenExample':
         """Create from dictionary"""
         return cls(**data)
 
@@ -123,39 +125,39 @@ class GoldenExample:
 @dataclass
 class GoldenTestset:
     """A versioned golden testset"""
-    id: Optional[str] = None
+    id: str | None = None
     name: str = ""
     description: str = ""
     version_major: int = 1
     version_minor: int = 0
     version_patch: int = 0
-    version_label: Optional[str] = None
+    version_label: str | None = None
 
-    domain: Optional[str] = None
+    domain: str | None = None
     source_type: str = "manual"
     status: TestsetStatus = TestsetStatus.DRAFT
     validation_status: ValidationStatus = ValidationStatus.PENDING
 
     # Metadata
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
     created_by: str = "system"
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
     # Phoenix integration
-    phoenix_project_id: Optional[str] = None
-    phoenix_experiment_id: Optional[str] = None
+    phoenix_project_id: str | None = None
+    phoenix_experiment_id: str | None = None
 
     # Quality tracking
-    quality_score: Optional[float] = None
+    quality_score: float | None = None
 
     # Examples
-    examples: List[GoldenExample] = field(default_factory=list)
+    examples: list[GoldenExample] = field(default_factory=list)
 
     def __post_init__(self):
         if self.id is None:
             self.id = str(uuid.uuid4())
         if self.created_at is None:
-            self.created_at = datetime.now(timezone.utc)
+            self.created_at = datetime.now(UTC)
 
     @property
     def version_string(self) -> str:
@@ -165,7 +167,7 @@ class GoldenTestset:
             return f"{base}-{self.version_label}"
         return base
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization"""
         return {
             'id': self.id,
@@ -201,7 +203,7 @@ class GoldenTestsetManager:
     - Phoenix experiment integration
     """
 
-    def __init__(self, connection_string: Optional[str] = None):
+    def __init__(self, connection_string: str | None = None):
         self.connection_string = connection_string or os.environ.get(
             "DATABASE_URL",
             "postgresql://langchain:langchain@localhost:6024/langchain"
@@ -258,14 +260,14 @@ class GoldenTestsetManager:
         self,
         name: str,
         description: str,
-        examples: List[GoldenExample],
-        domain: Optional[str] = None,
+        examples: list[GoldenExample],
+        domain: str | None = None,
         source_type: str = "manual",
         created_by: str = "system",
-        phoenix_project_id: Optional[str] = None,
-        phoenix_experiment_id: Optional[str] = None,
-        tags: Optional[List[str]] = None,
-        version_label: Optional[str] = None
+        phoenix_project_id: str | None = None,
+        phoenix_experiment_id: str | None = None,
+        tags: list[str] | None = None,
+        version_label: str | None = None
     ) -> GoldenTestset:
         """
         Create a new golden testset
@@ -349,11 +351,11 @@ class GoldenTestsetManager:
 
     async def get_testset(
         self,
-        testset_id: Optional[str] = None,
-        name: Optional[str] = None,
-        version: Optional[str] = None,
+        testset_id: str | None = None,
+        name: str | None = None,
+        version: str | None = None,
         include_examples: bool = True
-    ) -> Optional[GoldenTestset]:
+    ) -> GoldenTestset | None:
         """
         Retrieve a golden testset by ID, name, or name+version
 
@@ -416,13 +418,13 @@ class GoldenTestsetManager:
 
     async def list_testsets(
         self,
-        domain: Optional[str] = None,
-        status: Optional[TestsetStatus] = None,
-        created_by: Optional[str] = None,
+        domain: str | None = None,
+        status: TestsetStatus | None = None,
+        created_by: str | None = None,
         include_examples: bool = False,
         limit: int = 100,
         offset: int = 0
-    ) -> List[GoldenTestset]:
+    ) -> list[GoldenTestset]:
         """
         List golden testsets with optional filtering
 
@@ -489,13 +491,13 @@ class GoldenTestsetManager:
     async def update_testset(
         self,
         testset_id: str,
-        examples: Optional[List[GoldenExample]] = None,
-        description: Optional[str] = None,
+        examples: list[GoldenExample] | None = None,
+        description: str | None = None,
         change_type: ChangeType = ChangeType.PATCH,
-        change_summary: Optional[str] = None,
+        change_summary: str | None = None,
         updated_by: str = "system",
-        phoenix_experiment_id: Optional[str] = None,
-        tags: Optional[List[str]] = None
+        phoenix_experiment_id: str | None = None,
+        tags: list[str] | None = None
     ) -> GoldenTestset:
         """
         Update a testset and create a new version
@@ -658,7 +660,7 @@ class GoldenTestsetManager:
     # Version Management
     # =========================================================================
 
-    async def get_versions(self, name: str) -> List[Dict[str, Any]]:
+    async def get_versions(self, name: str) -> list[dict[str, Any]]:
         """Get all versions of a testset by name"""
         conn = await self.get_connection()
         try:
@@ -680,8 +682,8 @@ class GoldenTestsetManager:
         self,
         testset_id: str,
         reviewer: str,
-        comments: Optional[str] = None,
-        checklist: Optional[Dict[str, bool]] = None
+        comments: str | None = None,
+        checklist: dict[str, bool] | None = None
     ) -> bool:
         """
         Approve a testset for production use
@@ -742,7 +744,7 @@ class GoldenTestsetManager:
             example.question_embedding, example.ground_truth_embedding
         )
 
-    async def _load_examples(self, conn: asyncpg.Connection, testset_id: str) -> List[GoldenExample]:
+    async def _load_examples(self, conn: asyncpg.Connection, testset_id: str) -> list[GoldenExample]:
         """Load all examples for a testset"""
         rows = await conn.fetch("""
             SELECT * FROM golden_examples WHERE testset_id = $1 ORDER BY created_at
@@ -798,7 +800,7 @@ class GoldenTestsetManager:
         current_minor: int,
         current_patch: int,
         change_type: ChangeType
-    ) -> Tuple[int, int, int]:
+    ) -> tuple[int, int, int]:
         """Calculate new version numbers based on change type"""
         if change_type == ChangeType.MAJOR:
             return current_major + 1, 0, 0
@@ -809,9 +811,9 @@ class GoldenTestsetManager:
 
     def _calculate_changes(
         self,
-        old_examples: List[GoldenExample],
-        new_examples: List[GoldenExample]
-    ) -> Tuple[int, int, int]:
+        old_examples: list[GoldenExample],
+        new_examples: list[GoldenExample]
+    ) -> tuple[int, int, int]:
         """Calculate added, modified, and removed examples"""
         old_ids = {ex.id for ex in old_examples}
         new_ids = {ex.id for ex in new_examples}
@@ -888,9 +890,9 @@ class GoldenTestsetManager:
 
         return round(quality_score, 3)
 
-    async def detect_testset_changes(self, testset_name: str, current_examples: List[GoldenExample]) -> Any:
+    async def detect_testset_changes(self, testset_name: str, current_examples: list[GoldenExample]) -> Any:
         """Detect changes in a testset using change detection module"""
-        from .change_detector import detect_testset_changes, create_baseline_hashes
+        from .change_detector import create_baseline_hashes, detect_testset_changes
 
         # Get current testset for baseline
         testset = await self.get_testset(testset_name)
@@ -907,7 +909,7 @@ class GoldenTestsetManager:
         # Detect changes
         return await detect_testset_changes(testset_name, current_examples_dicts, baseline_hashes)
 
-    async def bulk_insert_examples(self, testset_name: str, examples: List[GoldenExample]) -> None:
+    async def bulk_insert_examples(self, testset_name: str, examples: list[GoldenExample]) -> None:
         """Bulk insert examples for performance testing"""
         async with self.get_connection() as conn:
             testset = await self.get_testset(testset_name)
@@ -917,7 +919,7 @@ class GoldenTestsetManager:
             # Use executemany for bulk operations
             example_data = [
                 (str(uuid.uuid4()), testset.id, ex.question, ex.ground_truth,
-                 json.dumps(ex.metadata or {}), datetime.now(timezone.utc))
+                 json.dumps(ex.metadata or {}), datetime.now(UTC))
                 for ex in examples
             ]
 
@@ -973,8 +975,8 @@ class GoldenTestsetManager:
                 domain=existing_testset.domain,
                 examples=existing_testset.examples.copy(),
                 metadata=existing_testset.metadata.copy(),
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc)
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC)
             )
 
             # Insert new version
@@ -997,7 +999,7 @@ class GoldenTestsetManager:
 
             return new_testset
 
-    async def get_latest_version(self, testset_name: str) -> Optional[SemanticVersion]:
+    async def get_latest_version(self, testset_name: str) -> SemanticVersion | None:
         """Get the latest version of a testset"""
         async with self.get_connection() as conn:
             version_row = await conn.fetchrow("""
@@ -1017,7 +1019,7 @@ class GoldenTestsetManager:
                 patch=version_row['version_patch']
             )
 
-    async def get_version_history(self, testset_name: str) -> List[Dict[str, Any]]:
+    async def get_version_history(self, testset_name: str) -> list[dict[str, Any]]:
         """Get version history for a testset"""
         async with self.get_connection() as conn:
             rows = await conn.fetch("""
@@ -1029,7 +1031,7 @@ class GoldenTestsetManager:
 
             return [dict(row) for row in rows]
 
-    async def update_quality_metrics(self, testset_id: str, metrics: Dict[str, float], validation_status: ValidationStatus) -> None:
+    async def update_quality_metrics(self, testset_id: str, metrics: dict[str, float], validation_status: ValidationStatus) -> None:
         """Update quality metrics for a testset"""
         async with self.get_connection() as conn:
             await conn.execute("""
@@ -1055,10 +1057,10 @@ class GoldenTestsetManager:
                 metrics.get('coverage', 0.0),
                 metrics.get('diversity', 0.0),
                 validation_status.value,
-                datetime.now(timezone.utc)
+                datetime.now(UTC)
             )
 
-    async def get_quality_metrics(self, testset_id: str) -> Optional[Dict[str, Any]]:
+    async def get_quality_metrics(self, testset_id: str) -> dict[str, Any] | None:
         """Get quality metrics for a testset"""
         async with self.get_connection() as conn:
             row = await conn.fetchrow("""
@@ -1072,7 +1074,7 @@ class GoldenTestsetManager:
 # Convenience Functions
 # =========================================================================
 
-def create_testset_from_dict(data: Dict[str, Any]) -> GoldenTestset:
+def create_testset_from_dict(data: dict[str, Any]) -> GoldenTestset:
     """Create testset from dictionary (e.g., loaded from JSON)"""
     examples_data = data.pop('examples', [])
     examples = [GoldenExample.from_dict(ex) for ex in examples_data]
@@ -1083,7 +1085,7 @@ def create_testset_from_dict(data: Dict[str, Any]) -> GoldenTestset:
     return testset
 
 
-def export_testset_to_dict(testset: GoldenTestset) -> Dict[str, Any]:
+def export_testset_to_dict(testset: GoldenTestset) -> dict[str, Any]:
     """Export testset to dictionary for serialization"""
     return testset.to_dict()
 

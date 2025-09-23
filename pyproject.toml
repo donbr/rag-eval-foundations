@@ -41,3 +41,14 @@ dev = [
     "pytest>=8.4.1",
     "ruff>=0.12.1",
 ]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Allow dynamic imports in manager.py for database connection utilities
+"src/golden_testset/manager.py" = ["E402"]
