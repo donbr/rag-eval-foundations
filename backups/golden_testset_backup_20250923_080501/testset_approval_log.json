@@ -1,0 +1,20 @@
+[
+  {
+    "id": "4e83caba-d0ca-40bb-b089-043543c8f6ff",
+    "testset_id": "a0e8f4a7-8b4c-4c8d-9e5f-1a2b3c4d5e6f",
+    "reviewer": "data_scientist",
+    "review_status": "approved",
+    "review_comments": "Baseline testset meets quality thresholds and covers core financial aid topics. Ready for evaluation experiments.",
+    "review_checklist": "{\"quality_check\": true, \"accuracy_check\": true, \"coverage_check\": true, \"diversity_check\": true}",
+    "reviewed_at": "2025-09-23T06:08:27.987330+00:00"
+  },
+  {
+    "id": "3d3887bb-3275-4c7a-946b-2823b829645c",
+    "testset_id": "a0e8f4a7-8b4c-4c8d-9e5f-1a2b3c4d5e6f",
+    "reviewer": "data_scientist",
+    "review_status": "approved",
+    "review_comments": "Baseline testset meets quality thresholds and covers core financial aid topics. Ready for evaluation experiments.",
+    "review_checklist": "{\"quality_check\": true, \"accuracy_check\": true, \"coverage_check\": true, \"diversity_check\": true}",
+    "reviewed_at": "2025-09-23T06:08:34.002785+00:00"
+  }
+]

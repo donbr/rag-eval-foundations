@@ -1,0 +1,90 @@
+[
+  {
+    "id": 1,
+    "migration_name": "rollback_20250922_230511",
+    "migration_type": "rollback",
+    "applied_at": "2025-09-23T06:05:11.634743+00:00",
+    "applied_by": "rollback_script",
+    "version": "rollback",
+    "checksum": null,
+    "rollback_script": null,
+    "metadata": "{\"backup_id\": null, \"rollback_at\": \"2025-09-22T23:05:11.634618\"}"
+  },
+  {
+    "id": 2,
+    "migration_name": "rollback_20250922_230549",
+    "migration_type": "rollback",
+    "applied_at": "2025-09-23T06:05:49.664854+00:00",
+    "applied_by": "rollback_script",
+    "version": "rollback",
+    "checksum": null,
+    "rollback_script": null,
+    "metadata": "{\"backup_id\": null, \"rollback_at\": \"2025-09-22T23:05:49.664713\"}"
+  },
+  {
+    "id": 3,
+    "migration_name": "rollback_20250922_230634",
+    "migration_type": "rollback",
+    "applied_at": "2025-09-23T06:06:34.575819+00:00",
+    "applied_by": "rollback_script",
+    "version": "rollback",
+    "checksum": null,
+    "rollback_script": null,
+    "metadata": "{\"backup_id\": null, \"rollback_at\": \"2025-09-22T23:06:34.575703\"}"
+  },
+  {
+    "id": 4,
+    "migration_name": "rollback_20250922_230703",
+    "migration_type": "rollback",
+    "applied_at": "2025-09-23T06:07:03.428620+00:00",
+    "applied_by": "rollback_script",
+    "version": "rollback",
+    "checksum": null,
+    "rollback_script": null,
+    "metadata": "{\"backup_id\": null, \"rollback_at\": \"2025-09-22T23:07:03.428498\"}"
+  },
+  {
+    "id": 5,
+    "migration_name": "rollback_20250922_230755",
+    "migration_type": "rollback",
+    "applied_at": "2025-09-23T06:07:55.123743+00:00",
+    "applied_by": "rollback_script",
+    "version": "rollback",
+    "checksum": null,
+    "rollback_script": null,
+    "metadata": "{\"backup_id\": null, \"rollback_at\": \"2025-09-22T23:07:55.123631\"}"
+  },
+  {
+    "id": 6,
+    "migration_name": "golden_testset_schema_v1_20250922_230828",
+    "migration_type": "schema",
+    "applied_at": "2025-09-23T06:08:28.076114+00:00",
+    "applied_by": "migration_script",
+    "version": "1.0.0",
+    "checksum": null,
+    "rollback_script": null,
+    "metadata": "{\"description\": \"Initial golden testset management schema\", \"force_applied\": true, \"tables_created\": 0, \"files_generated\": [\"01_core_tables.sql\", \"02_indexes.sql\", \"03_functions.sql\", \"04_views.sql\", \"05_sample_data.sql\"]}"
+  },
+  {
+    "id": 7,
+    "migration_name": "rollback_20250922_230833",
+    "migration_type": "rollback",
+    "applied_at": "2025-09-23T06:08:33.914125+00:00",
+    "applied_by": "rollback_script",
+    "version": "rollback",
+    "checksum": null,
+    "rollback_script": null,
+    "metadata": "{\"backup_id\": null, \"rollback_at\": \"2025-09-22T23:08:33.913993\"}"
+  },
+  {
+    "id": 8,
+    "migration_name": "golden_testset_schema_v1_20250922_230834",
+    "migration_type": "schema",
+    "applied_at": "2025-09-23T06:08:34.109912+00:00",
+    "applied_by": "migration_script",
+    "version": "1.0.0",
+    "checksum": null,
+    "rollback_script": null,
+    "metadata": "{\"description\": \"Initial golden testset management schema\", \"force_applied\": true, \"tables_created\": 0, \"files_generated\": [\"01_core_tables.sql\", \"02_indexes.sql\", \"03_functions.sql\", \"04_views.sql\", \"05_sample_data.sql\"]}"
+  }
+]

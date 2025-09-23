@@ -22,6 +22,7 @@ dependencies = [
     "psycopg2-binary",
     "pypdf",
     "python-dotenv",
+    "pyyaml>=6.0.2",
     "ragas",
     "rank_bm25",
     "rapidfuzz",

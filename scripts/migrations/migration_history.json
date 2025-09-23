@@ -1,0 +1,97 @@
+[
+  {
+    "migration_name": "golden_testset_schema_v1_20250922_230828",
+    "migration_type": "schema",
+    "applied_at": "2025-09-22T23:08:28.079708",
+    "applied_by": "migration_script",
+    "version": "1.0.0",
+    "metadata": {
+      "description": "Initial golden testset management schema",
+      "tables_created": 0,
+      "files_generated": [
+        "01_core_tables.sql",
+        "02_indexes.sql",
+        "03_functions.sql",
+        "04_views.sql",
+        "05_sample_data.sql"
+      ],
+      "force_applied": true
+    }
+  },
+  {
+    "migration_name": "golden_testset_schema_v1_20250922_230834",
+    "migration_type": "schema",
+    "applied_at": "2025-09-22T23:08:34.115423",
+    "applied_by": "migration_script",
+    "version": "1.0.0",
+    "metadata": {
+      "description": "Initial golden testset management schema",
+      "tables_created": 0,
+      "files_generated": [
+        "01_core_tables.sql",
+        "02_indexes.sql",
+        "03_functions.sql",
+        "04_views.sql",
+        "05_sample_data.sql"
+      ],
+      "force_applied": true
+    }
+  },
+  {
+    "migration_name": "golden_testset_schema_v1_20250923_080502",
+    "migration_type": "schema",
+    "applied_at": "2025-09-23T08:05:02.230467",
+    "applied_by": "migration_script",
+    "version": "1.0.0",
+    "metadata": {
+      "description": "Initial golden testset management schema",
+      "tables_created": 0,
+      "files_generated": [
+        "01_core_tables.sql",
+        "02_indexes.sql",
+        "03_functions.sql",
+        "04_views.sql",
+        "05_sample_data.sql"
+      ],
+      "force_applied": true
+    }
+  },
+  {
+    "migration_name": "golden_testset_schema_v1_20250923_080927",
+    "migration_type": "schema",
+    "applied_at": "2025-09-23T08:09:27.436757",
+    "applied_by": "migration_script",
+    "version": "1.0.0",
+    "metadata": {
+      "description": "Initial golden testset management schema",
+      "tables_created": 0,
+      "files_generated": [
+        "01_core_tables.sql",
+        "02_indexes.sql",
+        "03_functions.sql",
+        "04_views.sql",
+        "05_sample_data.sql"
+      ],
+      "force_applied": true
+    }
+  },
+  {
+    "migration_name": "golden_testset_schema_v1_20250923_081131",
+    "migration_type": "schema",
+    "applied_at": "2025-09-23T08:11:31.812638",
+    "applied_by": "migration_script",
+    "version": "1.0.0",
+    "metadata": {
+      "description": "Initial golden testset management schema",
+      "tables_created": 0,
+      "files_generated": [
+        "01_core_tables.sql",
+        "02_indexes.sql",
+        "03_functions.sql",
+        "04_views.sql",
+        "05_sample_data.sql"
+      ],
+      "force_applied": true
+    }
+  }
+]

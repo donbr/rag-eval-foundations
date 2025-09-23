@@ -1,0 +1,15 @@
+[
+  {
+    "id": "e4ec18eb-cf81-81c1-d192-5e6f71829304",
+    "testset_id": "a0e8f4a7-8b4c-4c8d-9e5f-1a2b3c4d5e6f",
+    "parent_version_id": null,
+    "version_string": "1.0.0",
+    "change_type": "major",
+    "change_summary": "Initial baseline testset created from RAGAS generation using financial aid PDFs",
+    "examples_added": 3,
+    "examples_modified": 0,
+    "examples_removed": 0,
+    "created_at": "2025-09-23T15:05:02.150183+00:00",
+    "created_by": "system"
+  }
+]
