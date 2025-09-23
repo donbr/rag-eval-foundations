@@ -550,6 +550,69 @@ The `run_rag_evaluation_pipeline.py` script provides:
 - Environment validation and Docker service management
 - Progress tracking and execution summaries
 
+### Feature Branch Push Strategy
+
+**Push Timing**: Feature branches should be pushed to GitHub **after completing each phase** implementation and validation.
+
+#### Pre-Push Validation Checklist
+
+Before pushing feature branches, complete this validation sequence:
+
+```bash
+# 1. Validate phase completion against .claude/tasks.yaml
+python scripts/validation/check_implementation_status.py
+
+# 2. Check branch-phase alignment
+python scripts/validation/validate_branch_phase.py
+
+# 3. Run comprehensive tests
+python -m pytest tests/unit/ -v
+python validation/postgres_data_analysis.py
+python validation/retrieval_strategy_comparison.py
+
+# 4. Verify no scope creep
+python scripts/validation/detect_scope_creep.py
+
+# 5. Ensure all dependencies are satisfied
+uv sync && python -c "import all_required_modules"
+```
+
+#### Push Commands
+
+```bash
+# Standard feature branch push (after validation)
+git add .
+git commit -m "Complete Phase X implementation with [key features]"
+git push origin feature/phaseX-[description]
+
+# Create pull request
+gh pr create --title "Phase X: [Implementation Summary]" --body "## Implementation Summary
+- [Key feature 1]
+- [Key feature 2]
+- [Validation results]
+
+## Testing Evidence
+- All unit tests passing
+- Phase validation complete
+- No scope creep detected"
+```
+
+#### Pull Request Guidelines
+
+**Required Information:**
+1. **Implementation Summary**: Key features and changes
+2. **Testing Evidence**: Validation script outputs, test results
+3. **Phase Alignment**: Confirmation of proper branch-phase mapping
+4. **Breaking Changes**: Any API or interface changes
+5. **Dependencies**: New packages or configuration requirements
+
+**Review Criteria:**
+- [ ] Phase requirements from `.claude/tasks.yaml` are met
+- [ ] All tests passing and validation scripts successful
+- [ ] No scope creep into other phases
+- [ ] Proper error handling and logging
+- [ ] Documentation updated for new features
+
 ### External Documentation
 
 For additional context and deep-dive analysis:
