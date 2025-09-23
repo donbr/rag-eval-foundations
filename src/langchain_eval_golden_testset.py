@@ -5,9 +5,8 @@ import json
 from datetime import datetime
 
 import pandas as pd
-from dotenv import load_dotenv
 from data_loader import load_docs_from_postgres
-from langchain_eval_foundations_e2e import Config, setup_environment
+from langchain_eval_foundations_e2e import setup_environment
 
 import phoenix as px
 

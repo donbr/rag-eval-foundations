@@ -298,7 +298,7 @@ async def main():
     try:
         # Setup
         config = setup_environment()
-        tracer_provider = setup_phoenix_tracing(config)
+        setup_phoenix_tracing(config)
 
         logger.info(f"✅ Phoenix tracing configured for project: {config.project_name}")
         logger.info(f"📁 Table names: baseline='{config.table_baseline}', semantic='{config.table_semantic}'")

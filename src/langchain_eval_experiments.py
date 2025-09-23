@@ -228,8 +228,8 @@ Context:
             return task
 
         # Create task function for this strategy
-        task_function = create_task_function(chain, strategy_name)
-        
+        create_task_function(chain, strategy_name)
+
         # Run the experiment
         experiment_name = f"{strategy_name}_rag_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
@@ -259,7 +259,7 @@ Context:
                 "status": "FAILED"
             })
 
-    print(f"\n📊 Experiment Summary:")
+    print("\n📊 Experiment Summary:")
     for result in experiment_results:
         if result["status"] == "SUCCESS":
             print(f"  ✅ {result['strategy']}: {result['experiment_id']}")

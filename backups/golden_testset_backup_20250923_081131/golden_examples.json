@@ -1,0 +1,76 @@
+[
+  {
+    "id": "b1f9e5b8-9c5d-5d9e-ae6f-2b3c4d5e6f71",
+    "testset_id": "a0e8f4a7-8b4c-4c8d-9e5f-1a2b3c4d5e6f",
+    "question": "What are the eligibility requirements for Federal Pell Grants?",
+    "ground_truth": "Federal Pell Grants are available to undergraduate students who demonstrate exceptional financial need and have not earned a bachelor's degree. Students must be enrolled in an eligible program, maintain satisfactory academic progress, and complete the FAFSA.",
+    "contexts": [
+      "Federal Pell Grants are need-based grants for undergraduate students who have not earned a bachelor's or professional degree.",
+      "To be eligible for a Pell Grant, students must demonstrate financial need through the FAFSA and meet academic requirements."
+    ],
+    "ragas_question_type": "simple",
+    "ragas_evolution_type": "reasoning",
+    "ragas_difficulty": "2.5",
+    "retrieval_strategy": "semantic_chunking",
+    "retrieval_score": "0.8842",
+    "retrieval_metadata": null,
+    "context_precision": "0.89",
+    "context_recall": "0.76",
+    "faithfulness": "0.92",
+    "answer_relevancy": "0.88",
+    "created_at": "2025-09-23T15:09:27.356408+00:00",
+    "updated_at": "2025-09-23T15:09:27.356408+00:00",
+    "question_embedding": null,
+    "ground_truth_embedding": null
+  },
+  {
+    "id": "c2eae6c9-ad6e-6eaf-bf71-3c4d5e6f7182",
+    "testset_id": "a0e8f4a7-8b4c-4c8d-9e5f-1a2b3c4d5e6f",
+    "question": "How does the Direct Loan Program work for graduate students?",
+    "ground_truth": "Graduate students can borrow both subsidized and unsubsidized Direct Loans. The interest rate and borrowing limits are set annually. Graduate students are also eligible for PLUS loans for additional funding beyond Direct Loan limits.",
+    "contexts": [
+      "The Direct Loan Program offers federal student loans directly from the U.S. Department of Education.",
+      "Graduate students have access to both subsidized and unsubsidized loans with specific borrowing limits.",
+      "PLUS loans are available for graduate students who need additional funding beyond Direct Loan limits."
+    ],
+    "ragas_question_type": "complex",
+    "ragas_evolution_type": "multi_context",
+    "ragas_difficulty": "3.2",
+    "retrieval_strategy": "ensemble",
+    "retrieval_score": "0.9156",
+    "retrieval_metadata": null,
+    "context_precision": "0.82",
+    "context_recall": "0.85",
+    "faithfulness": "0.89",
+    "answer_relevancy": "0.91",
+    "created_at": "2025-09-23T15:09:27.356408+00:00",
+    "updated_at": "2025-09-23T15:09:27.356408+00:00",
+    "question_embedding": null,
+    "ground_truth_embedding": null
+  },
+  {
+    "id": "d3ebf7da-be7f-7fbf-c182-4d5e6f718293",
+    "testset_id": "a0e8f4a7-8b4c-4c8d-9e5f-1a2b3c4d5e6f",
+    "question": "What documentation is required for FAFSA verification?",
+    "ground_truth": "FAFSA verification typically requires tax transcripts or tax returns, W-2 forms, bank statements, investment records, and records of untaxed income. Some students may also need to provide Social Security benefits statements or child support records.",
+    "contexts": [
+      "Verification documentation includes federal tax transcripts, W-2 forms, and bank statements.",
+      "Students selected for verification must provide proof of income, assets, and household composition.",
+      "The specific documents required depend on the items selected for verification by the Department of Education."
+    ],
+    "ragas_question_type": "simple",
+    "ragas_evolution_type": "reasoning",
+    "ragas_difficulty": "2.8",
+    "retrieval_strategy": "contextual_compression",
+    "retrieval_score": "0.8734",
+    "retrieval_metadata": null,
+    "context_precision": "0.91",
+    "context_recall": "0.79",
+    "faithfulness": "0.86",
+    "answer_relevancy": "0.84",
+    "created_at": "2025-09-23T15:09:27.356408+00:00",
+    "updated_at": "2025-09-23T15:09:27.356408+00:00",
+    "question_embedding": null,
+    "ground_truth_embedding": null
+  }
+]

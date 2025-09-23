@@ -1,0 +1,41 @@
+[
+  {
+    "id": "a30c499e-4d2c-4c8a-9992-64ff7c4c7718",
+    "testset_id": "a0e8f4a7-8b4c-4c8d-9e5f-1a2b3c4d5e6f",
+    "metric_type": "coverage",
+    "metric_value": "0.8700",
+    "metric_details": "{\"domain_coverage\": {\"pell_grants\": 0.9, \"direct_loans\": 0.85, \"verification\": 0.85}}",
+    "computed_at": "2025-09-23T15:05:02.150183+00:00",
+    "computed_by": "validation_script",
+    "computation_method": "automated",
+    "threshold_min": "0.8000",
+    "threshold_max": null,
+    "passes_threshold": true
+  },
+  {
+    "id": "e4765bc9-7521-4c3d-a32c-de976c034b5a",
+    "testset_id": "a0e8f4a7-8b4c-4c8d-9e5f-1a2b3c4d5e6f",
+    "metric_type": "diversity",
+    "metric_value": "0.8200",
+    "metric_details": "{\"question_types\": {\"simple\": 2, \"complex\": 1}, \"difficulty_range\": [2.5, 3.2]}",
+    "computed_at": "2025-09-23T15:05:02.150183+00:00",
+    "computed_by": "validation_script",
+    "computation_method": "automated",
+    "threshold_min": "0.7500",
+    "threshold_max": null,
+    "passes_threshold": true
+  },
+  {
+    "id": "3527f52d-cb94-45d3-a18b-e132fe88c944",
+    "testset_id": "a0e8f4a7-8b4c-4c8d-9e5f-1a2b3c4d5e6f",
+    "metric_type": "quality",
+    "metric_value": "0.8500",
+    "metric_details": "{\"avg_faithfulness\": 0.89, \"avg_context_recall\": 0.80, \"avg_answer_relevancy\": 0.88, \"avg_context_precision\": 0.87}",
+    "computed_at": "2025-09-23T15:05:02.150183+00:00",
+    "computed_by": "validation_script",
+    "computation_method": "ragas",
+    "threshold_min": "0.8000",
+    "threshold_max": null,
+    "passes_threshold": true
+  }
+]
