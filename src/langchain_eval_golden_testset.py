@@ -1,6 +1,7 @@
 # langchain_eval_golden_testset.py
 
 import os
+import json
 from datetime import datetime
 
 import pandas as pd
@@ -25,7 +26,9 @@ def generate_testset(
         documents=docs, testset_size=testset_size
     )
 
-    return golden_testset
+    golden_testset_df = golden_testset.to_pandas()
+
+    return golden_testset_df
 
 
 def upload_to_phoenix(golden_testset, dataset_name: str = "mixed_golden_testset") -> dict:
@@ -36,7 +39,7 @@ def upload_to_phoenix(golden_testset, dataset_name: str = "mixed_golden_testset"
             "input": testset_df["user_input"],
             "output": testset_df["reference"],
             "contexts": testset_df["reference_contexts"].apply(
-                lambda x: str(x) if isinstance(x, list) else str(x)
+                lambda x: json.dumps(x) if isinstance(x, (list, dict)) else str(x)
             ),
             "synthesizer": testset_df["synthesizer_name"],
             "question_type": testset_df["synthesizer_name"],
@@ -44,8 +47,8 @@ def upload_to_phoenix(golden_testset, dataset_name: str = "mixed_golden_testset"
         }
     )
 
-    px_dataset_name = dataset_name
-    # px_dataset_name = f"{dataset_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    # Use timestamped dataset name for immutable snapshots
+    px_dataset_name = f"{dataset_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
     client = px.Client()
     dataset = client.upload_dataset(
@@ -80,13 +83,17 @@ def main():
     testset_size = int(os.getenv("GOLDEN_TESTSET_SIZE", config.golden_testset_size))
     print(f"🧪 Generating golden test set with {testset_size} examples")
     
-    golden_testset = generate_testset(
+    golden_testset_dataframe = generate_testset(
         all_review_docs, generator_llm, generator_embeddings, testset_size
     )
 
-    dataset_result = upload_to_phoenix(golden_testset, dataset_name="mixed_golden_testset")
+    golden_testset_json = golden_testset_dataframe.to_json(orient='records', lines=True)
+    with open("golden_testset.json", "w") as f:
+        f.write(golden_testset_json)
 
-    print(f"🚀 Workflow completed. Phoenix upload status: {dataset_result['status']}")
+    # dataset_result = upload_to_phoenix(golden_testset, dataset_name="mixed_golden_testset")
+
+    # print(f"🚀 Workflow completed. Phoenix upload status: {dataset_result['status']}")
 
 if __name__ == "__main__":
     main()

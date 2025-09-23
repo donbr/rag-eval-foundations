@@ -1,0 +1,515 @@
+name: Golden Testset Enterprise CI
+
+on:
+  push:
+    branches: ['main', 'develop']
+    paths:
+      - 'src/golden_testset/**'
+      - 'tests/**'
+      - 'schemas/**'
+      - 'flows/**'
+      - '.claude/tasks.yaml'
+      - '.github/workflows/golden-testset-ci.yaml'
+  pull_request:
+    branches: ['main', 'develop']
+    paths:
+      - 'src/golden_testset/**'
+      - 'tests/**'
+      - 'schemas/**'
+      - 'flows/**'
+      - '.claude/tasks.yaml'
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: 'Phase to test (e.g., phase1, phase2, all)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - 'all'
+          - 'phase1'
+          - 'phase2'
+          - 'phase3'
+          - 'phase4'
+          - 'phase5'
+          - 'phase6'
+          - 'phase7'
+          - 'phase8'
+      enable_integration:
+        description: 'Run integration tests'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  PYTHON_VERSION: '3.13'
+  UV_VERSION: 'latest'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================================
+  # Quick validation and setup
+  # ============================================================================
+
+  validate:
+    name: Validate & Setup
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.setup-matrix.outputs.matrix }}
+      should-run-integration: ${{ steps.setup-matrix.outputs.should-run-integration }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v3
+        with:
+          uv-version: ${{ env.UV_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup matrix
+        id: setup-matrix
+        run: |
+          PHASE="${{ github.event.inputs.phase || 'all' }}"
+          ENABLE_INTEGRATION="${{ github.event.inputs.enable_integration || 'true' }}"
+
+          if [[ "$PHASE" == "all" ]]; then
+            MATRIX='["phase1", "phase2", "phase3", "phase4", "phase5", "phase6", "phase7", "phase8"]'
+          else
+            MATRIX='["'$PHASE'"]'
+          fi
+
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          echo "should-run-integration=$ENABLE_INTEGRATION" >> $GITHUB_OUTPUT
+
+      - name: Validate configuration
+        run: |
+          # Validate tasks.yaml syntax
+          python -c "
+          import yaml
+          with open('.claude/tasks.yaml', 'r') as f:
+              config = yaml.safe_load(f)
+              print(f'✓ Configuration valid: {len(config[\"phases\"])} phases')
+          "
+
+      - name: Validate flow syntax
+        run: |
+          uv sync --dev
+          source .venv/bin/activate
+          python -m py_compile flows/golden_testset_flow.py
+          echo "✓ Flow syntax valid"
+
+  # ============================================================================
+  # Lint and format check
+  # ============================================================================
+
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v3
+        with:
+          uv-version: ${{ env.UV_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Lint with ruff
+        run: |
+          source .venv/bin/activate
+          ruff check flows/ src/ tests/ --output-format=github
+
+      - name: Check formatting
+        run: |
+          source .venv/bin/activate
+          ruff format flows/ src/ tests/ --check
+
+      - name: Type check (optional)
+        run: |
+          source .venv/bin/activate
+          mypy flows/ --ignore-missing-imports || echo "Type checking completed with warnings"
+
+      - name: YAML lint
+        run: |
+          pip install yamllint
+          yamllint .claude/tasks.yaml .github/workflows/ || echo "YAML linting completed"
+
+  # ============================================================================
+  # Phase execution using hybrid flow (Matrix Strategy)
+  # ============================================================================
+
+  execute-phases:
+    name: Execute ${{ matrix.phase }}
+    runs-on: ubuntu-latest
+    needs: [validate, lint]
+    strategy:
+      fail-fast: false
+      matrix:
+        phase: ${{ fromJson(needs.validate.outputs.matrix) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v3
+        with:
+          uv-version: ${{ env.UV_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Create required directories
+        run: |
+          mkdir -p schemas src/golden_testset tests scripts reports
+          mkdir -p scripts/db scripts/release backups logs
+
+      - name: Run hybrid flow for ${{ matrix.phase }}
+        env:
+          # Mock secrets for CI (replace with real secrets in production)
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-mock-key-for-ci' }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY || 'mock-cohere-key' }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/test' }}
+          PHOENIX_ENDPOINT: ${{ secrets.PHOENIX_ENDPOINT || 'http://localhost:6006' }}
+          PHOENIX_API_KEY: ${{ secrets.PHOENIX_API_KEY || 'mock-phoenix-key' }}
+          PHOENIX_CLIENT_HEADERS: ${{ secrets.PHOENIX_CLIENT_HEADERS || '{}' }}
+        run: |
+          source .venv/bin/activate
+
+          echo "🚀 Running phase ${{ matrix.phase }} with hybrid Prefect 3.x orchestrator (enterprise mode)"
+
+          # Run with enterprise features (no Git operations in CI environment)
+          python flows/golden_testset_flow.py \
+            --tasks .claude/tasks.yaml \
+            --workdir . \
+            --only-phase ${{ matrix.phase }} \
+            --enable-monitoring \
+            --enable-quality-gates \
+            --enable-cost-tracking
+
+      - name: Upload execution report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: execution-report-${{ matrix.phase }}
+          path: reports/
+          retention-days: 30
+
+      - name: Check for critical failures
+        if: failure()
+        run: |
+          echo "❌ Phase ${{ matrix.phase }} failed"
+          # In production, this could trigger alerts
+          exit 1
+
+  # ============================================================================
+  # Integration tests (conditional)
+  # ============================================================================
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [validate, execute-phases]
+    if: needs.validate.outputs.should-run-integration == 'true'
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v3
+        with:
+          uv-version: ${{ env.UV_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
+      - name: Test database connection
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        run: |
+          source .venv/bin/activate
+          python -c "
+          import asyncpg
+          import asyncio
+          async def test():
+              conn = await asyncpg.connect('$DATABASE_URL')
+              result = await conn.fetchval('SELECT version()')
+              print(f'✓ Database connected: {result[:50]}...')
+              await conn.close()
+          asyncio.run(test())
+          "
+
+      - name: Run integration test simulation
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          OPENAI_API_KEY: 'sk-mock-key-for-integration-test'
+        run: |
+          source .venv/bin/activate
+
+          echo "🧪 Running integration test simulation"
+
+          # Test the flow configuration loading
+          python -c "
+          import sys
+          sys.path.append('flows')
+          from golden_testset_flow import load_yaml, parse_plan
+          from pathlib import Path
+
+          # Test configuration loading
+          config = load_yaml(Path('.claude/tasks.yaml'))
+          plan = parse_plan(config)
+
+          print(f'✓ Loaded plan: {plan.project} v{plan.version}')
+          print(f'✓ Phases: {[p.id for p in plan.phases]}')
+          print(f'✓ Total tasks: {sum(len(p.tasks) for p in plan.phases)}')
+
+          # Test with mock environment
+          import os
+          os.environ['OPENAI_API_KEY'] = 'sk-mock'
+          os.environ['COHERE_API_KEY'] = 'mock'
+
+          from golden_testset_flow import apply_globals
+          apply_globals(plan)
+          print('✓ Globals applied successfully')
+          "
+
+  # ============================================================================
+  # Security and quality checks
+  # ============================================================================
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Run Bandit security scan
+        run: |
+          pip install bandit[toml]
+          bandit -r flows/ src/ -f json -o bandit-report.json || true
+
+      - name: Upload security scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-scan-results
+          path: bandit-report.json
+
+  # ============================================================================
+  # Performance validation
+  # ============================================================================
+
+  performance:
+    name: Performance Check
+    runs-on: ubuntu-latest
+    needs: [validate, execute-phases]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v3
+        with:
+          uv-version: ${{ env.UV_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Performance validation
+        run: |
+          source .venv/bin/activate
+
+          echo "⚡ Performance validation"
+
+          # Test flow startup time
+          start_time=$(date +%s%N)
+          python -c "
+          from flows.golden_testset_flow import load_yaml, parse_plan
+          from pathlib import Path
+          config = load_yaml(Path('.claude/tasks.yaml'))
+          plan = parse_plan(config)
+          print(f'Configuration loaded: {len(plan.phases)} phases')
+          "
+          end_time=$(date +%s%N)
+          duration=$(( (end_time - start_time) / 1000000 ))
+
+          echo "✓ Flow startup time: ${duration}ms"
+
+          # Validate startup time is reasonable (<2000ms)
+          if [ $duration -gt 2000 ]; then
+            echo "⚠ Warning: Startup time exceeds 2000ms"
+          else
+            echo "✓ Startup time within acceptable limits"
+          fi
+
+  # ============================================================================
+  # Deployment readiness check
+  # ============================================================================
+
+  deployment-check:
+    name: Deployment Ready
+    runs-on: ubuntu-latest
+    needs: [execute-phases, integration-tests, security, performance]
+    if: always() && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check deployment readiness
+        run: |
+          echo "=== Deployment Readiness Check ==="
+
+          # Check job statuses
+          PHASE_STATUS="${{ needs.execute-phases.result }}"
+          INTEGRATION_STATUS="${{ needs.integration-tests.result }}"
+          SECURITY_STATUS="${{ needs.security.result }}"
+          PERFORMANCE_STATUS="${{ needs.performance.result }}"
+
+          echo "📊 Job Results:"
+          echo "  - Phase Execution: $PHASE_STATUS"
+          echo "  - Integration Tests: $INTEGRATION_STATUS"
+          echo "  - Security Scan: $SECURITY_STATUS"
+          echo "  - Performance Check: $PERFORMANCE_STATUS"
+
+          # Check required files
+          required_files=(
+            "flows/golden_testset_flow.py"
+            ".claude/tasks.yaml"
+            "docs/golden_testset_management_plan.md"
+          )
+
+          echo "📁 Required Files:"
+          for file in "${required_files[@]}"; do
+            if [ -f "$file" ]; then
+              echo "  ✓ $file"
+            else
+              echo "  ✗ $file (missing)"
+            fi
+          done
+
+          # Overall readiness
+          if [[ "$PHASE_STATUS" == "success" && "$SECURITY_STATUS" == "success" ]]; then
+            echo "✅ Ready for deployment"
+          else
+            echo "⚠ Not ready for deployment - check failed jobs"
+          fi
+
+      - name: Generate deployment summary
+        run: |
+          cat > deployment-summary.md << EOF
+          # Golden Testset Deployment Summary
+
+          **Generated**: $(date -u)
+          **Commit**: ${{ github.sha }}
+          **Branch**: ${{ github.ref_name }}
+
+          ## Test Results
+          - **Phase Execution**: ${{ needs.execute-phases.result }}
+          - **Integration Tests**: ${{ needs.integration-tests.result }}
+          - **Security Scan**: ${{ needs.security.result }}
+          - **Performance Check**: ${{ needs.performance.result }}
+
+          ## Quick Start
+          \`\`\`bash
+          # Simple development test
+          python flows/golden_testset_flow.py --test
+
+          # Full production deployment
+          python flows/golden_testset_flow.py --production
+
+          # Create Prefect deployment
+          python flows/golden_testset_flow.py --deploy
+          \`\`\`
+
+          ## Next Steps
+          $( if [[ "${{ needs.execute-phases.result }}" == "success" ]]; then
+            echo "- ✅ Deploy to staging environment"
+            echo "- ✅ Run smoke tests"
+            echo "- ✅ Deploy to production"
+          else
+            echo "- ❌ Fix failing tests before deployment"
+            echo "- ❌ Review execution reports in artifacts"
+          fi )
+          EOF
+
+      - name: Upload deployment summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-summary
+          path: deployment-summary.md
+
+  # ============================================================================
+  # Notification (optional)
+  # ============================================================================
+
+  notify:
+    name: Notify Results
+    runs-on: ubuntu-latest
+    needs: [deployment-check]
+    if: always() && github.ref == 'refs/heads/main'
+    steps:
+      - name: Summary
+        run: |
+          echo "🎉 Golden Testset CI Pipeline Complete"
+          echo "📋 Results available in deployment summary artifact"
+
+          # In production, this could integrate with:
+          # - Slack notifications
+          # - Email alerts
+          # - Dashboard updates
+          # - Deployment triggers

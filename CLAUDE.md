@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a complete 3-stage RAG (Retrieval-Augmented Generation) evaluation pipeline that compares different retrieval strategies using **financial aid PDF documents** as the primary data source. The project implements a full toolkit including infrastructure setup, RAGAS golden test set generation, and automated evaluation with metrics.
 
-**Current Configuration**: The system is configured to load PDF documents by default (`load_pdfs: true`) and has CSV movie review loading disabled (`load_csvs: false`). The project focuses on financial aid document processing while maintaining backwards compatibility with the original John Wick movie review dataset.
+**Current Configuration**: The system is configured to load PDF documents by default (`load_pdfs: true`) and has CSV movie review loading disabled (`load_csvs: false`). The project focuses on ai usage document processing while maintaining backwards compatibility with the original John Wick movie review dataset.
 
 **Validated Performance** (July 2025): Complete pipeline tested and operational with 269 PDF documents, 6 retrieval strategies, full Phoenix observability, and comprehensive validation scripts. All core functionality verified working.
 
@@ -436,6 +436,45 @@ Key files and their purposes:
 - `retrieval_strategy_comparison.py`: Interactive comparison tool
 - `data_loader.py`: Data ingestion utilities
 - `notebooks/`: Analysis and validation tools
+
+### Golden Testset Flow Architecture Decision
+
+**Current Implementation: Hybrid Approach (September 2025)**
+
+After evaluation of clean vs. hybrid implementations, the project uses a **hybrid architecture** that combines:
+
+#### **Flow Files:**
+- **`flows/golden_testset_flow.py`**: Main hybrid implementation with:
+  - Clean Prefect 3.x core (1:1 YAML mapping, explicit future resolution)
+  - Optional enterprise features (Git workflow, quality gates, monitoring, cost tracking)
+  - Dual CLI modes: Simple development (`--only-phase`) and advanced production (`--production`)
+
+- **`flows/golden_testset_flow_alternate.py`**: Reference clean implementation (archived)
+- **`flows/golden_testset_flow_prefect3.py`**: Clean Prefect 3.x source (archived)
+
+#### **CI/CD Workflows:**
+- **`.github/workflows/ci.yaml`**: Basic development workflow for simple testing
+- **`.github/workflows/golden-testset-ci.yaml`**: Comprehensive enterprise workflow with:
+  - Integration tests with PostgreSQL
+  - Security scanning and performance validation
+  - Deployment readiness checks
+
+#### **Usage Patterns:**
+```bash
+# Simple development (uses clean core)
+python flows/golden_testset_flow.py --only-phase phase1
+
+# Enterprise mode (uses optional features)
+python flows/golden_testset_flow.py --production --enable-quality-gates
+
+# CI/CD triggers appropriate workflow based on changes
+```
+
+#### **Rationale:**
+- **Flexibility**: Clean execution when simple, enterprise features when needed
+- **Growth Path**: Scales from development to production environments
+- **Backward Compatibility**: Supports both basic and advanced use cases
+- **Prefect 3.x Ready**: Modern async patterns with explicit future resolution
 
 ### Extending the Framework
 

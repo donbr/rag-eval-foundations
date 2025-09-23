@@ -1,0 +1,246 @@
+name: Golden Testset Development CI
+
+on:
+  push:
+    branches: ['main', 'develop']
+    paths:
+      - 'flows/**'
+      - 'src/golden_testset/**'
+      - '.claude/tasks.yaml'
+      - '.github/workflows/ci.yaml'
+  pull_request:
+    branches: ['main', 'develop']
+    paths:
+      - 'flows/**'
+      - 'src/golden_testset/**'
+      - '.claude/tasks.yaml'
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: 'Phase to test (e.g., phase1, phase2, all)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - 'all'
+          - 'phase1'
+          - 'phase2'
+          - 'phase3'
+          - 'phase4'
+          - 'phase5'
+          - 'phase6'
+          - 'phase7'
+          - 'phase8'
+
+env:
+  PYTHON_VERSION: '3.13'
+  UV_VERSION: 'latest'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================================
+  # Quick validation and setup
+  # ============================================================================
+
+  validate:
+    name: Validate & Setup
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.setup-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v3
+        with:
+          uv-version: ${{ env.UV_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup matrix
+        id: setup-matrix
+        run: |
+          PHASE="${{ github.event.inputs.phase || 'all' }}"
+
+          if [[ "$PHASE" == "all" ]]; then
+            MATRIX='["phase1", "phase2", "phase3", "phase4", "phase5", "phase6", "phase7", "phase8"]'
+          else
+            MATRIX='["'$PHASE'"]'
+          fi
+
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+
+      - name: Validate configuration
+        run: |
+          # Validate tasks.yaml syntax
+          python -c "
+          import yaml
+          with open('.claude/tasks.yaml', 'r') as f:
+              config = yaml.safe_load(f)
+              print(f'✓ Configuration valid: {len(config[\"phases\"])} phases')
+          "
+
+      - name: Validate flow syntax
+        run: |
+          uv sync --dev
+          source .venv/bin/activate
+          python -m py_compile flows/golden_testset_flow.py
+          echo "✓ Flow syntax valid"
+
+  # ============================================================================
+  # Lint and format check
+  # ============================================================================
+
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v3
+        with:
+          uv-version: ${{ env.UV_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Lint with ruff
+        run: |
+          source .venv/bin/activate
+          ruff check flows/ src/ --output-format=github
+
+      - name: Check formatting
+        run: |
+          source .venv/bin/activate
+          ruff format flows/ src/ --check
+
+      - name: Type check
+        run: |
+          source .venv/bin/activate
+          mypy flows/ --ignore-missing-imports || echo "Type checking completed with warnings"
+
+  # ============================================================================
+  # Phase execution using hybrid Prefect 3.x flow (Matrix Strategy)
+  # ============================================================================
+
+  execute-phases:
+    name: Execute ${{ matrix.phase }}
+    runs-on: ubuntu-latest
+    needs: [validate, lint]
+    strategy:
+      fail-fast: false
+      matrix:
+        phase: ${{ fromJson(needs.validate.outputs.matrix) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v3
+        with:
+          uv-version: ${{ env.UV_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Create required directories
+        run: |
+          mkdir -p src/golden_testset scripts reports
+          mkdir -p scripts/db scripts/release backups logs
+
+      - name: Run hybrid flow for ${{ matrix.phase }}
+        env:
+          # Mock secrets for CI (replace with real secrets in production)
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-mock-key-for-ci' }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY || 'mock-cohere-key' }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/test' }}
+          PHOENIX_ENDPOINT: ${{ secrets.PHOENIX_ENDPOINT || 'http://localhost:6006' }}
+          PHOENIX_API_KEY: ${{ secrets.PHOENIX_API_KEY || 'mock-phoenix-key' }}
+        run: |
+          source .venv/bin/activate
+
+          echo "🚀 Running phase ${{ matrix.phase }} with hybrid Prefect 3.x orchestrator (development mode)"
+
+          # Run hybrid flow in development mode (clean core + monitoring)
+          python flows/golden_testset_flow.py \
+            --tasks .claude/tasks.yaml \
+            --workdir . \
+            --only-phase ${{ matrix.phase }} \
+            --development
+
+      - name: Upload execution report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: execution-report-${{ matrix.phase }}
+          path: reports/
+          retention-days: 30
+
+      - name: Check for critical failures
+        if: failure()
+        run: |
+          echo "❌ Phase ${{ matrix.phase }} failed"
+          exit 1
+
+  # ============================================================================
+  # Deployment readiness check
+  # ============================================================================
+
+  deployment-check:
+    name: Deployment Ready
+    runs-on: ubuntu-latest
+    needs: [execute-phases]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check deployment readiness
+        run: |
+          echo "=== Deployment Readiness Check ==="
+
+          # Check job statuses
+          PHASE_STATUS="${{ needs.execute-phases.result }}"
+
+          echo "📊 Job Results:"
+          echo "  - Phase Execution: $PHASE_STATUS"
+
+          # Check required files
+          required_files=(
+            "flows/golden_testset_flow.py"
+            ".claude/tasks.yaml"
+            "docs/golden_testset_management_plan.md"
+          )
+
+          echo "📁 Required Files:"
+          for file in "${required_files[@]}"; do
+            if [ -f "$file" ]; then
+              echo "  ✓ $file"
+            else
+              echo "  ✗ $file (missing)"
+            fi
+          done
+
+          # Overall readiness
+          if [[ "$PHASE_STATUS" == "success" ]]; then
+            echo "✅ Ready for deployment"
+          else
+            echo "⚠ Not ready for deployment - check failed jobs"
+          fi
