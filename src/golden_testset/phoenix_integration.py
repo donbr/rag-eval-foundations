@@ -13,7 +13,8 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Dict, List, Optional
+from decimal import Decimal
 
 import aiohttp
 from opentelemetry import trace as otel_trace
@@ -421,6 +422,233 @@ class PhoenixIntegration:
             "comparison_url": comparison_url,
         }
 
+    async def configure_model_pricing(
+        self, model_name: str, name_pattern: str, provider: str,
+        input_cost_per_million: float, output_cost_per_million: float
+    ) -> Dict[str, Any]:
+        """Configure model pricing in Phoenix.
+
+        Args:
+            model_name: Human-readable model name
+            name_pattern: Regex pattern to match model name in traces
+            provider: Model provider (e.g., 'openai', 'anthropic')
+            input_cost_per_million: Cost per 1 million input tokens
+            output_cost_per_million: Cost per 1 million output tokens
+
+        Returns:
+            Configuration result
+        """
+        payload = {
+            "model_name": model_name,
+            "name_pattern": name_pattern,
+            "provider": provider,
+            "input_cost_per_million": input_cost_per_million,
+            "output_cost_per_million": output_cost_per_million,
+            "start_date": datetime.utcnow().isoformat()
+        }
+
+        async with aiohttp.ClientSession() as session:
+            url = f"{self.config.endpoint}/v1/model_pricing"
+            headers = self.config.get_headers()
+
+            async with session.post(url, json=payload, headers=headers) as response:
+                if response.status not in [200, 201]:
+                    error_text = await response.text()
+                    raise Exception(f"Failed to configure model pricing: {response.status} - {error_text}")
+
+                result = await response.json()
+                logger.info(f"Configured pricing for {model_name}: ${input_cost_per_million}/1M input, ${output_cost_per_million}/1M output")
+                return result
+
+    async def get_trace_costs(self, trace_ids: List[str]) -> Dict[str, Dict[str, float]]:
+        """Get cost summaries for specific traces using GraphQL.
+
+        Args:
+            trace_ids: List of trace IDs to get costs for
+
+        Returns:
+            Dictionary mapping trace_id to cost summary (prompt, completion, total)
+        """
+        query = """
+        query GetTraceCosts($traceIds: [ID!]!) {
+            traces(ids: $traceIds) {
+                id
+                costSummary {
+                    prompt
+                    completion
+                    total
+                }
+            }
+        }
+        """
+
+        payload = {
+            "query": query,
+            "variables": {"traceIds": trace_ids}
+        }
+
+        async with aiohttp.ClientSession() as session:
+            url = f"{self.config.endpoint}/graphql"
+            headers = self.config.get_headers()
+
+            async with session.post(url, json=payload, headers=headers) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise Exception(f"Failed to get trace costs: {response.status} - {error_text}")
+
+                result = await response.json()
+
+                costs = {}
+                for trace in result.get("data", {}).get("traces", []):
+                    trace_id = trace["id"]
+                    cost_summary = trace.get("costSummary", {})
+                    costs[trace_id] = {
+                        "prompt": float(cost_summary.get("prompt", 0)),
+                        "completion": float(cost_summary.get("completion", 0)),
+                        "total": float(cost_summary.get("total", 0))
+                    }
+
+                return costs
+
+    async def get_session_costs(self, session_id: str) -> Dict[str, Any]:
+        """Get aggregated costs for a session.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            Session cost summary with breakdown by model
+        """
+        # Query traces for this session
+        query = """
+        query GetSessionTraces($sessionId: String!) {
+            traces(filter: {sessionId: $sessionId}) {
+                id
+                spans {
+                    attributes {
+                        llm {
+                            modelName
+                            tokenCount {
+                                prompt
+                                completion
+                                total
+                            }
+                        }
+                    }
+                }
+                costSummary {
+                    prompt
+                    completion
+                    total
+                }
+            }
+        }
+        """
+
+        payload = {
+            "query": query,
+            "variables": {"sessionId": session_id}
+        }
+
+        async with aiohttp.ClientSession() as session:
+            url = f"{self.config.endpoint}/graphql"
+            headers = self.config.get_headers()
+
+            async with session.post(url, json=payload, headers=headers) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise Exception(f"Failed to get session costs: {response.status} - {error_text}")
+
+                result = await response.json()
+
+                traces = result.get("data", {}).get("traces", [])
+
+                total_cost = 0.0
+                total_prompt_cost = 0.0
+                total_completion_cost = 0.0
+                model_breakdown = {}
+
+                for trace in traces:
+                    cost_summary = trace.get("costSummary", {})
+                    trace_cost = float(cost_summary.get("total", 0))
+                    trace_prompt_cost = float(cost_summary.get("prompt", 0))
+                    trace_completion_cost = float(cost_summary.get("completion", 0))
+
+                    total_cost += trace_cost
+                    total_prompt_cost += trace_prompt_cost
+                    total_completion_cost += trace_completion_cost
+
+                    # Extract model information from spans
+                    for span in trace.get("spans", []):
+                        llm_attrs = span.get("attributes", {}).get("llm", {})
+                        model_name = llm_attrs.get("modelName")
+                        if model_name:
+                            if model_name not in model_breakdown:
+                                model_breakdown[model_name] = {
+                                    "cost": 0.0,
+                                    "prompt_tokens": 0,
+                                    "completion_tokens": 0,
+                                    "total_tokens": 0
+                                }
+
+                            model_breakdown[model_name]["cost"] += trace_cost
+                            token_count = llm_attrs.get("tokenCount", {})
+                            model_breakdown[model_name]["prompt_tokens"] += token_count.get("prompt", 0)
+                            model_breakdown[model_name]["completion_tokens"] += token_count.get("completion", 0)
+                            model_breakdown[model_name]["total_tokens"] += token_count.get("total", 0)
+
+                return {
+                    "session_id": session_id,
+                    "total_cost": total_cost,
+                    "prompt_cost": total_prompt_cost,
+                    "completion_cost": total_completion_cost,
+                    "model_breakdown": model_breakdown,
+                    "trace_count": len(traces)
+                }
+
+    async def setup_default_model_pricing(self):
+        """Configure default pricing for common models."""
+        default_models = [
+            {
+                "model_name": "GPT-4.1 Mini",
+                "name_pattern": "gpt-4.1-mini",
+                "provider": "openai",
+                "input_cost": 0.15,  # $0.15 per 1M tokens
+                "output_cost": 0.60   # $0.60 per 1M tokens
+            },
+            {
+                "model_name": "Text Embedding 3 Small",
+                "name_pattern": "text-embedding-3-small",
+                "provider": "openai",
+                "input_cost": 0.02,  # $0.02 per 1M tokens
+                "output_cost": 0.0   # No output cost for embeddings
+            },
+            {
+                "model_name": "Cohere Rerank English v3",
+                "name_pattern": "rerank-english-v3.0",
+                "provider": "cohere",
+                "input_cost": 0.20,  # $0.20 per 1M tokens
+                "output_cost": 0.0   # No output cost for reranking
+            }
+        ]
+
+        results = []
+        for model in default_models:
+            try:
+                result = await self.configure_model_pricing(
+                    model_name=model["model_name"],
+                    name_pattern=model["name_pattern"],
+                    provider=model["provider"],
+                    input_cost_per_million=model["input_cost"],
+                    output_cost_per_million=model["output_cost"]
+                )
+                results.append({"model": model["model_name"], "status": "success", "result": result})
+            except Exception as e:
+                logger.error(f"Failed to configure pricing for {model['model_name']}: {e}")
+                results.append({"model": model["model_name"], "status": "error", "error": str(e)})
+
+        return results
+
 
 async def main():
     """CLI entry point for Phoenix integration."""
@@ -437,6 +665,9 @@ async def main():
     parser.add_argument(
         "--dry-run", action="store_true", help="Simulate actions without execution"
     )
+    parser.add_argument("--setup-pricing", action="store_true", help="Configure default model pricing")
+    parser.add_argument("--get-costs", type=str, help="Get costs for session ID")
+    parser.add_argument("--trace-costs", nargs="+", help="Get costs for specific trace IDs")
 
     args = parser.parse_args()
 
@@ -469,6 +700,21 @@ async def main():
             )
             print(json.dumps(result, indent=2))
             print(f"\nComparison URL: {result['comparison_url']}")
+
+        elif args.setup_pricing:
+            results = await phoenix.setup_default_model_pricing()
+            print("Model pricing configuration results:")
+            for result in results:
+                status = "✅" if result["status"] == "success" else "❌"
+                print(f"{status} {result['model']}: {result['status']}")
+
+        elif args.get_costs:
+            costs = await phoenix.get_session_costs(args.get_costs)
+            print(json.dumps(costs, indent=2))
+
+        elif args.trace_costs:
+            costs = await phoenix.get_trace_costs(args.trace_costs)
+            print(json.dumps(costs, indent=2))
 
         else:
             parser.print_help()

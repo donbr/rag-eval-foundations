@@ -1,6 +1,9 @@
-"""Cost tracking for golden testset generation with token usage monitoring.
+"""Legacy cost tracking module - DEPRECATED in favor of hybrid_cost_manager.py
 
-This module provides functionality to:
+This module is maintained for backward compatibility but new features should use
+the HybridCostManager which leverages Phoenix's built-in cost tracking.
+
+Legacy functionality:
 1. Track token usage for each generation
 2. Calculate costs based on model pricing
 3. Monitor budget thresholds and alerts
@@ -623,11 +626,49 @@ async def create_cost_tables():
     logger.info("Cost tracking tables created successfully")
 
 
+def create_hybrid_cost_manager():
+    """Create a HybridCostManager instance for migration.
+
+    Returns:
+        HybridCostManager configured with Phoenix integration
+    """
+    from .phoenix_integration import PhoenixIntegration, PhoenixConfig
+    from .manager import GoldenTestsetManager
+    from .hybrid_cost_manager import HybridCostManager
+
+    phoenix_config = PhoenixConfig()
+    manager = GoldenTestsetManager()
+    phoenix = PhoenixIntegration(manager, phoenix_config)
+
+    return HybridCostManager(phoenix)
+
+
+async def migrate_to_hybrid():
+    """Migrate legacy cost tracking to hybrid approach."""
+    print("🔄 Migrating to hybrid cost management...")
+    print("📊 Legacy cost data will remain in PostgreSQL for historical analysis")
+    print("💡 New cost tracking will use Phoenix + budget management")
+    print("\nMigration steps:")
+    print("1. ✅ Legacy cost_tracker.py marked as deprecated")
+    print("2. ✅ HybridCostManager created")
+    print("3. 🔧 Configure Phoenix model pricing...")
+
+    try:
+        hybrid_manager = create_hybrid_cost_manager()
+        await hybrid_manager.phoenix.setup_default_model_pricing()
+        print("4. ✅ Phoenix model pricing configured")
+        print("\n🎉 Migration complete! Use HybridCostManager for new cost tracking.")
+
+    except Exception as e:
+        print(f"4. ❌ Migration failed: {e}")
+        print("💡 Ensure Phoenix is running and accessible")
+
+
 async def main():
     """CLI entry point for cost tracking."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Golden testset cost tracking")
+    parser = argparse.ArgumentParser(description="Legacy golden testset cost tracking")
     parser.add_argument("--report", action="store_true", help="Generate cost report")
     parser.add_argument("--start", type=str, help="Report start date (YYYY-MM-DD)")
     parser.add_argument("--end", type=str, help="Report end date (YYYY-MM-DD)")
@@ -635,11 +676,17 @@ async def main():
     parser.add_argument(
         "--create-tables", action="store_true", help="Create database tables"
     )
+    parser.add_argument(
+        "--migrate", action="store_true", help="Migrate to hybrid cost management"
+    )
 
     args = parser.parse_args()
 
     try:
-        if args.create_tables:
+        if args.migrate:
+            await migrate_to_hybrid()
+
+        elif args.create_tables:
             await create_cost_tables()
             print("Cost tracking tables created")
 

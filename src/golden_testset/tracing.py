@@ -533,6 +533,83 @@ def record_generation_cost(cost_usd: float, model: str):
     tracer.record_metric("cost_per_generation", cost_usd, {"model": model})
 
 
+# Phoenix-integrated cost tracking helpers
+def set_cost_tracking_attributes(span: Any, model: str, input_tokens: int, output_tokens: int):
+    """Set OpenInference attributes for Phoenix cost tracking.
+
+    Args:
+        span: Current OpenTelemetry span
+        model: Model name
+        input_tokens: Number of input tokens
+        output_tokens: Number of output tokens
+    """
+    if span:
+        # Set required attributes for Phoenix cost calculation
+        span.set_attribute("llm.model_name", model)
+        span.set_attribute("llm.token_count.prompt", input_tokens)
+        span.set_attribute("llm.token_count.completion", output_tokens)
+        span.set_attribute("llm.token_count.total", input_tokens + output_tokens)
+
+        # Set provider information
+        if "gpt" in model.lower() or "text-embedding" in model.lower():
+            span.set_attribute("llm.provider", "openai")
+        elif "rerank" in model.lower():
+            span.set_attribute("llm.provider", "cohere")
+
+
+def get_current_trace_id() -> str | None:
+    """Get the current trace ID for cost tracking.
+
+    Returns:
+        Current trace ID or None if no active trace
+    """
+    span = tracer.get_current_span()
+    if span:
+        span_context = span.get_span_context()
+        if span_context:
+            return f"{span_context.trace_id:032x}"
+    return None
+
+
+@contextmanager
+def cost_tracked_operation(operation_name: str,
+                          model: str,
+                          input_tokens: int,
+                          output_tokens: int,
+                          session_id: str | None = None):
+    """Context manager for cost-tracked operations with Phoenix integration.
+
+    Args:
+        operation_name: Name of the operation
+        model: Model being used
+        input_tokens: Number of input tokens
+        output_tokens: Number of output tokens
+        session_id: Optional session ID for cost aggregation
+    """
+    attributes = {
+        "operation.type": "llm_call",
+        "llm.model_name": model,
+        "session.id": session_id
+    }
+
+    if session_id:
+        attributes["session.id"] = session_id
+
+    with tracer.span(operation_name, attributes=attributes) as span:
+        if span:
+            # Set cost tracking attributes
+            set_cost_tracking_attributes(span, model, input_tokens, output_tokens)
+
+            # Record metrics for backward compatibility
+            record_token_usage(input_tokens + output_tokens, model)
+
+            # Add session context if provided
+            if session_id:
+                span.set_attribute("session.id", session_id)
+
+        yield span
+
+
 async def test_tracing():
     """Test tracing functionality."""
 
@@ -555,7 +632,13 @@ async def test_tracing():
         record_token_usage(1500, "gpt-4.1-mini")
         return {"response": "generated text"}
 
-    logger.info("Testing tracing functionality...")
+    logger.info("Testing tracing functionality with Phoenix cost integration...")
+
+    # Test cost-tracked operations
+    with cost_tracked_operation("llm_generation", "gpt-4.1-mini", 100, 50, "test_session_123"):
+        await asyncio.sleep(0.1)
+        trace_id = get_current_trace_id()
+        logger.info(f"Cost-tracked operation with trace ID: {trace_id}")
 
     # Run test operations
     with trace_operation("test_suite"):
@@ -573,7 +656,13 @@ async def test_tracing():
         record_generation_duration(5.2)
         record_generation_cost(0.15, "gpt-4.1-mini")
 
-    logger.info("Tracing test completed")
+        # Test Phoenix integration
+        span = tracer.get_current_span()
+        if span:
+            set_cost_tracking_attributes(span, "text-embedding-3-small", 500, 0)
+            logger.info("Set Phoenix cost tracking attributes")
+
+    logger.info("Tracing test completed with Phoenix integration")
 
 
 if __name__ == "__main__":
