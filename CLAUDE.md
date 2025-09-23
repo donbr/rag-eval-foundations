@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a complete 3-stage RAG (Retrieval-Augmented Generation) evaluation pipeline that compares different retrieval strategies using **financial aid PDF documents** as the primary data source. The project implements a full toolkit including infrastructure setup, RAGAS golden test set generation, and automated evaluation with metrics.
+This is a complete 3-stage RAG (Retrieval-Augmented Generation) evaluation pipeline that compares different retrieval strategies using **research PDF documents** as the primary data source. The project implements a full toolkit including infrastructure setup, RAGAS golden test set generation, and automated evaluation with metrics.
 
-**Current Configuration**: The system is configured to load PDF documents by default (`load_pdfs: true`) and has CSV movie review loading disabled (`load_csvs: false`). The project focuses on financial aid document processing while maintaining backwards compatibility with the original John Wick movie review dataset.
+**Current Focus**: The system is configured to work with LLM interaction research documents (`llm-interaction-literature-review.pdf`, `howpeopleuseai.pdf`) and supports flexible document loading (`load_pdfs: true`, `load_csvs: false`). The project provides a general-purpose RAG evaluation platform while maintaining backwards compatibility with various document types.
 
 **Validated Performance** (July 2025): Complete pipeline tested and operational with 269 PDF documents, 6 retrieval strategies, full Phoenix observability, and comprehensive validation scripts. All core functionality verified working.
 
@@ -179,9 +179,9 @@ docker run -it --rm --name phoenix-container \
 
 ### Core Components
 
-1. **Data Pipeline**: 
-   - **Primary**: PDF document ingestion from financial aid sources (4 documents, ~269 pages)
-   - **Secondary**: CSV ingestion from John Wick movie reviews (optional, disabled by default)
+1. **Data Pipeline**:
+   - **Primary**: PDF document ingestion from research sources (LLM interaction literature, AI usage studies)
+   - **Secondary**: CSV ingestion from various datasets (optional, disabled by default)
    - Async document processing with metadata enrichment
    - PostgreSQL/pgvector storage with 1536-dimension embeddings
    
@@ -339,11 +339,10 @@ These commands provide quick verification that all components are working correc
 
 ### Data Structure
 **Primary Data (PDF Documents)**:
-- Financial aid PDFs stored in `data/` directory:
-  - `Academic_Calenders_Cost_of_Attendance_and_Packaging.pdf`
-  - `Applications_and_Verification_Guide.pdf`
-  - `The_Direct_Loan_Program.pdf`
-  - `The_Federal_Pell_Grant_Program.pdf`
+- Research PDFs stored in `data/` directory:
+  - `llm-interaction-literature-review.pdf` - Comprehensive review of human-LLM interaction research
+  - `howpeopleuseai.pdf` - Study on AI usage patterns and behaviors
+  - `llm-interaction-literature-review.md` - Markdown version for enhanced processing
 - Document metadata: `document_name`, `source_type`, `last_accessed_at`
 - Tables: `mixed_baseline_documents` and `mixed_semantic_documents`
 
@@ -515,7 +514,7 @@ docker stats rag-eval-pgvector rag-eval-phoenix
 
 ```python
 # Configuration in langchain_eval_foundations_e2e.py
-load_pdfs: bool = True   # Financial aid PDFs (enabled)
+load_pdfs: bool = True   # Research PDFs (enabled)
 load_csvs: bool = False  # John Wick CSVs (disabled)
 golden_testset_size: int = 10  # Number of examples in RAGAS golden test set
 ```
@@ -531,8 +530,8 @@ golden_testset_size: int = 10  # Number of examples in RAGAS golden test set
 - Via config: `golden_testset_size: int = 5` (modify Config class)
 
 **Test Queries by Data Type**:
-- **Financial Aid PDFs**: "What are the eligibility requirements for Federal Pell Grants?", "How does the Direct Loan Program work?"
-- **John Wick CSVs**: "What makes John Wick so effective as an assassin?", "How does the Continental Hotel operate?"
+- **LLM Research PDFs**: "What factors influence user trust in AI systems?", "How do people adapt their interaction patterns with LLMs?", "What are the key challenges in human-AI collaboration?"
+- **General CSV Datasets**: Flexible queries based on loaded dataset schema and content
 
 ### Cost Considerations
 

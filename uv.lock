@@ -2193,6 +2193,7 @@ dependencies = [
     { name = "langchain-openai" },
     { name = "langchain-postgres" },
     { name = "matplotlib" },
+    { name = "numpy" },
     { name = "openinference-instrumentation-langchain" },
     { name = "pandas" },
     { name = "psycopg2-binary" },
@@ -2203,6 +2204,8 @@ dependencies = [
     { name = "rank-bm25" },
     { name = "rapidfuzz" },
     { name = "requests" },
+    { name = "scikit-learn" },
+    { name = "scipy" },
     { name = "seaborn" },
     { name = "sqlalchemy" },
 ]
@@ -2228,6 +2231,7 @@ requires-dist = [
     { name = "langchain-openai" },
     { name = "langchain-postgres", specifier = ">=0.0.14" },
     { name = "matplotlib", specifier = ">=3.10.3" },
+    { name = "numpy", specifier = ">=1.26.4" },
     { name = "openinference-instrumentation-langchain" },
     { name = "pandas" },
     { name = "psycopg2-binary" },
@@ -2238,6 +2242,8 @@ requires-dist = [
     { name = "rank-bm25" },
     { name = "rapidfuzz" },
     { name = "requests" },
+    { name = "scikit-learn", specifier = ">=1.7.0" },
+    { name = "scipy", specifier = ">=1.15.3" },
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "sqlalchemy" },
 ]

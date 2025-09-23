@@ -17,6 +17,7 @@ dependencies = [
     "langchain-openai",
     "langchain-postgres>=0.0.14",
     "matplotlib>=3.10.3",
+    "numpy>=1.26.4",
     "openinference-instrumentation-langchain",
     "pandas",
     "psycopg2-binary",
@@ -27,6 +28,8 @@ dependencies = [
     "rank_bm25",
     "rapidfuzz",
     "requests",
+    "scikit-learn>=1.7.0",
+    "scipy>=1.15.3",
     "seaborn>=0.13.2",
     "sqlalchemy",
 ]

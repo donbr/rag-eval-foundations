@@ -29,8 +29,27 @@ from .manager import (
     export_testset_to_dict
 )
 
+# Phase 3: Quality Validation Pipeline
+from .quality_validator import (
+    QualityValidator,
+    QualityMetrics,
+    ValidationResult,
+    validate_testset_quality,
+    check_quality_gates
+)
+
+from .validation_pipeline import (
+    ValidationPipeline,
+    ValidationStage,
+    StrictnessLevel,
+    PipelineResult,
+    validate_with_pipeline,
+    check_activation_readiness
+)
+
 __version__ = "1.0.0"
 __all__ = [
+    # Core Phase 1 & 2
     "GoldenTestsetManager",
     "GoldenTestset",
     "GoldenExample",
@@ -38,5 +57,18 @@ __all__ = [
     "TestsetStatus",
     "ValidationStatus",
     "create_testset_from_dict",
-    "export_testset_to_dict"
+    "export_testset_to_dict",
+
+    # Phase 3: Quality Validation
+    "QualityValidator",
+    "QualityMetrics",
+    "ValidationResult",
+    "validate_testset_quality",
+    "check_quality_gates",
+    "ValidationPipeline",
+    "ValidationStage",
+    "StrictnessLevel",
+    "PipelineResult",
+    "validate_with_pipeline",
+    "check_activation_readiness"
 ]
