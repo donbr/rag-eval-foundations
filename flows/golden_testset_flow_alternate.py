@@ -8,10 +8,8 @@
 from __future__ import annotations
 
 import os
-import sys
 import time
 import yaml
-import shlex
 import signal
 import typing as t
 import subprocess
@@ -21,7 +19,6 @@ from dataclasses import dataclass, field
 from prefect import flow, task, get_run_logger
 from prefect.tasks import task_input_hash
 from prefect.states import State
-from prefect.futures import PrefectFuture
 from prefect.exceptions import PrefectException
 
 # --------------------

@@ -24,11 +24,10 @@ import asyncio
 import asyncpg
 import uuid
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional, Union, Tuple, AsyncGenerator
+from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 import json
-import hashlib
 import os
 from pathlib import Path
 
@@ -39,7 +38,7 @@ sys.path.insert(0, str(sys_path))
 from db_connection import DatabaseConnectionManager, ConnectionConfig
 
 # Import version types
-from .versioning import SemanticVersion, VersionBump
+from .versioning import SemanticVersion
 
 
 class ChangeType(Enum):
@@ -646,7 +645,7 @@ class GoldenTestsetManager:
                 """, testset_id)
 
                 # Delete testset
-                result = await conn.execute("""
+                await conn.execute("""
                     DELETE FROM golden_testsets WHERE id = $1
                 """, testset_id)
 
@@ -673,23 +672,6 @@ class GoldenTestsetManager:
             """, name)
 
             return [dict(row) for row in rows]
-
-        finally:
-            await self.release_connection(conn)
-
-    async def get_latest_version(self, name: str) -> Optional[str]:
-        """Get the latest version string for a testset"""
-        conn = await self.get_connection()
-        try:
-            row = await conn.fetchrow("""
-                SELECT format_version(version_major, version_minor, version_patch, version_label) as version
-                FROM golden_testsets
-                WHERE name = $1
-                ORDER BY version_major DESC, version_minor DESC, version_patch DESC
-                LIMIT 1
-            """, name)
-
-            return row['version'] if row else None
 
         finally:
             await self.release_connection(conn)
@@ -911,20 +893,19 @@ class GoldenTestsetManager:
         from .change_detector import detect_testset_changes, create_baseline_hashes
 
         # Get current testset for baseline
-        async with self.get_connection() as conn:
-            testset = await self.get_testset(testset_name)
-            if not testset:
-                raise ValueError(f"Testset '{testset_name}' not found")
+        testset = await self.get_testset(testset_name)
+        if not testset:
+            raise ValueError(f"Testset '{testset_name}' not found")
 
-            # Convert to dict format for change detection
-            baseline_examples = [ex.to_dict() for ex in testset.examples]
-            current_examples_dicts = [ex.to_dict() for ex in current_examples]
+        # Convert to dict format for change detection
+        baseline_examples = [ex.to_dict() for ex in testset.examples]
+        current_examples_dicts = [ex.to_dict() for ex in current_examples]
 
-            # Create baseline hashes
-            baseline_hashes = create_baseline_hashes(testset_name, baseline_examples)
+        # Create baseline hashes
+        baseline_hashes = create_baseline_hashes(testset_name, baseline_examples)
 
-            # Detect changes
-            return await detect_testset_changes(testset_name, current_examples_dicts, baseline_hashes)
+        # Detect changes
+        return await detect_testset_changes(testset_name, current_examples_dicts, baseline_hashes)
 
     async def bulk_insert_examples(self, testset_name: str, examples: List[GoldenExample]) -> None:
         """Bulk insert examples for performance testing"""

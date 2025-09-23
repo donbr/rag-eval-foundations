@@ -56,7 +56,7 @@ jobs:
       - name: Setup UV
         uses: astral-sh/setup-uv@v3
         with:
-          uv-version: ${{ env.UV_VERSION }}
+          version: ${{ env.UV_VERSION }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -110,7 +110,7 @@ jobs:
       - name: Setup UV
         uses: astral-sh/setup-uv@v3
         with:
-          uv-version: ${{ env.UV_VERSION }}
+          version: ${{ env.UV_VERSION }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -154,7 +154,7 @@ jobs:
       - name: Setup UV
         uses: astral-sh/setup-uv@v3
         with:
-          uv-version: ${{ env.UV_VERSION }}
+          version: ${{ env.UV_VERSION }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
