@@ -436,6 +436,45 @@ Key files and their purposes:
 - `data_loader.py`: Data ingestion utilities
 - `notebooks/`: Analysis and validation tools
 
+### Golden Testset Flow Architecture Decision
+
+**Current Implementation: Hybrid Approach (September 2025)**
+
+After evaluation of clean vs. hybrid implementations, the project uses a **hybrid architecture** that combines:
+
+#### **Flow Files:**
+- **`flows/golden_testset_flow.py`**: Main hybrid implementation with:
+  - Clean Prefect 3.x core (1:1 YAML mapping, explicit future resolution)
+  - Optional enterprise features (Git workflow, quality gates, monitoring, cost tracking)
+  - Dual CLI modes: Simple development (`--only-phase`) and advanced production (`--production`)
+
+- **`flows/golden_testset_flow_alternate.py`**: Reference clean implementation (archived)
+- **`flows/golden_testset_flow_prefect3.py`**: Clean Prefect 3.x source (archived)
+
+#### **CI/CD Workflows:**
+- **`.github/workflows/ci.yaml`**: Basic development workflow for simple testing
+- **`.github/workflows/golden-testset-ci.yaml`**: Comprehensive enterprise workflow with:
+  - Integration tests with PostgreSQL
+  - Security scanning and performance validation
+  - Deployment readiness checks
+
+#### **Usage Patterns:**
+```bash
+# Simple development (uses clean core)
+python flows/golden_testset_flow.py --only-phase phase1
+
+# Enterprise mode (uses optional features)
+python flows/golden_testset_flow.py --production --enable-quality-gates
+
+# CI/CD triggers appropriate workflow based on changes
+```
+
+#### **Rationale:**
+- **Flexibility**: Clean execution when simple, enterprise features when needed
+- **Growth Path**: Scales from development to production environments
+- **Backward Compatibility**: Supports both basic and advanced use cases
+- **Prefect 3.x Ready**: Modern async patterns with explicit future resolution
+
 ### Extending the Framework
 
 #### Adding New Retrieval Strategies

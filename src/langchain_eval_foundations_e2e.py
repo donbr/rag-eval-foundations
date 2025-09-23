@@ -66,6 +66,7 @@ class Config:
     
     # Model settings
     model_name: str = "gpt-4.1-mini"
+    # model_name: str = "gpt-5-nano"
     embedding_model: str = "text-embedding-3-small"
     
     # Data settings
