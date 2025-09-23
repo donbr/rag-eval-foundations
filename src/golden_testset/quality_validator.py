@@ -24,16 +24,14 @@ Usage:
 """
 
 import asyncio
-import hashlib
 import statistics
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Set
 
 import numpy as np
 from scipy import stats
-from sklearn.cluster import KMeans
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 

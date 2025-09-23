@@ -32,8 +32,7 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, List, Tuple, Dict, Any
-from datetime import datetime, timezone
-import json
+from datetime import datetime
 
 
 class VersionBump(Enum):

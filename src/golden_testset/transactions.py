@@ -21,13 +21,12 @@ Transaction Types:
 - APPROVAL_WORKFLOW: Multi-step approval with rollback
 """
 
-import asyncio
 import asyncpg
 import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional, AsyncGenerator, Callable, Union
+from typing import List, Dict, Any, Optional, AsyncGenerator
 from enum import Enum
 import json
 import time
@@ -211,7 +210,7 @@ class AtomicTransactionManager:
             try:
                 await conn.execute(f"RELEASE SAVEPOINT {savepoint_name}")
                 logger.debug(f"Released savepoint {savepoint_name}")
-            except:
+            except Exception:
                 # Savepoint may already be released or transaction rolled back
                 pass
 
