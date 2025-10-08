@@ -30,35 +30,39 @@ Example usage:
 
 import re
 from dataclasses import dataclass
-from enum import Enum
-from typing import Optional, List, Tuple, Dict, Any
 from datetime import datetime
+from enum import Enum
+from typing import Any
 
 
 class VersionBump(Enum):
     """Types of version bumps following semantic versioning"""
-    MAJOR = "major"      # Breaking changes: x.0.0
-    MINOR = "minor"      # New features: x.y.0
-    PATCH = "patch"      # Bug fixes: x.y.z
+
+    MAJOR = "major"  # Breaking changes: x.0.0
+    MINOR = "minor"  # New features: x.y.0
+    PATCH = "patch"  # Bug fixes: x.y.z
 
 
 class VersionValidationError(Exception):
     """Raised when version validation fails"""
+
     pass
 
 
 class VersionConflictError(Exception):
     """Raised when version conflicts are detected"""
+
     pass
 
 
 @dataclass
 class SemanticVersion:
     """Represents a semantic version with optional pre-release label"""
+
     major: int
     minor: int
     patch: int
-    label: Optional[str] = None
+    label: str | None = None
 
     def __post_init__(self):
         """Validate version components"""
@@ -73,16 +77,20 @@ class SemanticVersion:
         return base
 
     def __repr__(self) -> str:
-        return f"SemanticVersion({self.major}, {self.minor}, {self.patch}, {self.label!r})"
+        return (
+            f"SemanticVersion({self.major}, {self.minor}, {self.patch}, {self.label!r})"
+        )
 
     def __eq__(self, other) -> bool:
         """Equality comparison"""
         if not isinstance(other, SemanticVersion):
             return False
-        return (self.major == other.major and
-                self.minor == other.minor and
-                self.patch == other.patch and
-                self.label == other.label)
+        return (
+            self.major == other.major
+            and self.minor == other.minor
+            and self.patch == other.patch
+            and self.label == other.label
+        )
 
     def __lt__(self, other) -> bool:
         """Less than comparison for sorting"""
@@ -108,7 +116,7 @@ class SemanticVersion:
             return NotImplemented
         return self._compare_to(other) >= 0
 
-    def _compare_to(self, other: 'SemanticVersion') -> int:
+    def _compare_to(self, other: "SemanticVersion") -> int:
         """
         Compare this version to another
 
@@ -151,17 +159,17 @@ class SemanticVersion:
         """Check if this is a stable release (major > 0, no label)"""
         return self.major > 0 and self.label is None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization"""
         return {
-            'major': self.major,
-            'minor': self.minor,
-            'patch': self.patch,
-            'label': self.label
+            "major": self.major,
+            "minor": self.minor,
+            "patch": self.patch,
+            "label": self.label,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'SemanticVersion':
+    def from_dict(cls, data: dict[str, Any]) -> "SemanticVersion":
         """Create from dictionary"""
         return cls(**data)
 
@@ -180,19 +188,23 @@ class VersionManager:
 
     # Regex pattern for semantic version parsing
     VERSION_PATTERN = re.compile(
-        r'^(?P<major>0|[1-9]\d*)'
-        r'\.(?P<minor>0|[1-9]\d*)'
-        r'\.(?P<patch>0|[1-9]\d*)'
-        r'(?:-(?P<label>[0-9A-Za-z\-]+(?:\.[0-9A-Za-z\-]+)*))?$'
+        r"^(?P<major>0|[1-9]\d*)"
+        r"\.(?P<minor>0|[1-9]\d*)"
+        r"\.(?P<patch>0|[1-9]\d*)"
+        r"(?:-(?P<label>[0-9A-Za-z\-]+(?:\.[0-9A-Za-z\-]+)*))?$"
     )
 
     def __init__(self):
         self.validation_rules = {
-            'allow_prereleases': True,
-            'require_progression': True,  # New versions must be greater than previous
-            'allow_downgrades': False,    # Don't allow version downgrades
-            'max_major': 999,            # Maximum major version
-            'reserved_labels': ['dev', 'test', 'internal']  # Reserved pre-release labels
+            "allow_prereleases": True,
+            "require_progression": True,  # New versions must be greater than previous
+            "allow_downgrades": False,  # Don't allow version downgrades
+            "max_major": 999,  # Maximum major version
+            "reserved_labels": [
+                "dev",
+                "test",
+                "internal",
+            ],  # Reserved pre-release labels
         }
 
     def parse_version(self, version_string: str) -> SemanticVersion:
@@ -215,7 +227,9 @@ class VersionManager:
             1 2 3 beta
         """
         if not isinstance(version_string, str):
-            raise VersionValidationError(f"Version must be a string, got {type(version_string)}")
+            raise VersionValidationError(
+                f"Version must be a string, got {type(version_string)}"
+            )
 
         match = self.VERSION_PATTERN.match(version_string.strip())
         if not match:
@@ -225,16 +239,19 @@ class VersionManager:
             )
 
         try:
-            major = int(match.group('major'))
-            minor = int(match.group('minor'))
-            patch = int(match.group('patch'))
-            label = match.group('label')
+            major = int(match.group("major"))
+            minor = int(match.group("minor"))
+            patch = int(match.group("patch"))
+            label = match.group("label")
 
             # Validate against rules
-            if major > self.validation_rules['max_major']:
-                raise VersionValidationError(f"Major version {major} exceeds maximum {self.validation_rules['max_major']}")
+            if major > self.validation_rules["max_major"]:
+                raise VersionValidationError(
+                    f"Major version {major} exceeds maximum "
+                    f"{self.validation_rules['max_major']}"
+                )
 
-            if label and label in self.validation_rules['reserved_labels']:
+            if label and label in self.validation_rules["reserved_labels"]:
                 raise VersionValidationError(f"Label '{label}' is reserved")
 
             return SemanticVersion(major, minor, patch, label)
@@ -262,10 +279,7 @@ class VersionManager:
         return v1._compare_to(v2)
 
     def bump_version(
-        self,
-        current: SemanticVersion,
-        bump_type: VersionBump,
-        label: Optional[str] = None
+        self, current: SemanticVersion, bump_type: VersionBump, label: str | None = None
     ) -> SemanticVersion:
         """
         Bump a version according to semantic versioning rules
@@ -289,15 +303,14 @@ class VersionManager:
         elif bump_type == VersionBump.MINOR:
             return SemanticVersion(current.major, current.minor + 1, 0, label)
         elif bump_type == VersionBump.PATCH:
-            return SemanticVersion(current.major, current.minor, current.patch + 1, label)
+            return SemanticVersion(
+                current.major, current.minor, current.patch + 1, label
+            )
         else:
             raise ValueError(f"Invalid bump type: {bump_type}")
 
     def validate_progression(
-        self,
-        current: SemanticVersion,
-        new: SemanticVersion,
-        allow_equal: bool = False
+        self, current: SemanticVersion, new: SemanticVersion, allow_equal: bool = False
     ) -> bool:
         """
         Validate that a new version follows progression rules
@@ -320,26 +333,22 @@ class VersionManager:
                 f"New version {new} is the same as current version {current}"
             )
 
-        if self.validation_rules['require_progression'] and comparison > 0:
-            if not self.validation_rules['allow_downgrades']:
+        if self.validation_rules["require_progression"] and comparison > 0:
+            if not self.validation_rules["allow_downgrades"]:
                 raise VersionValidationError(
                     f"New version {new} is older than current version {current}. "
                     f"Downgrades are not allowed."
                 )
 
         # Additional rules for pre-releases
-        if new.is_prerelease and not self.validation_rules['allow_prereleases']:
-            raise VersionValidationError(
-                f"Pre-release versions are not allowed: {new}"
-            )
+        if new.is_prerelease and not self.validation_rules["allow_prereleases"]:
+            raise VersionValidationError(f"Pre-release versions are not allowed: {new}")
 
         return True
 
     def get_next_versions(
-        self,
-        current: SemanticVersion,
-        include_prereleases: bool = True
-    ) -> Dict[str, SemanticVersion]:
+        self, current: SemanticVersion, include_prereleases: bool = True
+    ) -> dict[str, SemanticVersion]:
         """
         Get possible next versions for a given current version
 
@@ -360,27 +369,39 @@ class VersionManager:
         next_versions = {}
 
         # Standard bumps
-        next_versions['major'] = self.bump_version(current, VersionBump.MAJOR)
-        next_versions['minor'] = self.bump_version(current, VersionBump.MINOR)
-        next_versions['patch'] = self.bump_version(current, VersionBump.PATCH)
+        next_versions["major"] = self.bump_version(current, VersionBump.MAJOR)
+        next_versions["minor"] = self.bump_version(current, VersionBump.MINOR)
+        next_versions["patch"] = self.bump_version(current, VersionBump.PATCH)
 
         # Pre-release versions if enabled
-        if include_prereleases and self.validation_rules['allow_prereleases']:
-            next_versions['major_alpha'] = self.bump_version(current, VersionBump.MAJOR, 'alpha')
-            next_versions['major_beta'] = self.bump_version(current, VersionBump.MAJOR, 'beta')
-            next_versions['major_rc'] = self.bump_version(current, VersionBump.MAJOR, 'rc')
+        if include_prereleases and self.validation_rules["allow_prereleases"]:
+            next_versions["major_alpha"] = self.bump_version(
+                current, VersionBump.MAJOR, "alpha"
+            )
+            next_versions["major_beta"] = self.bump_version(
+                current, VersionBump.MAJOR, "beta"
+            )
+            next_versions["major_rc"] = self.bump_version(
+                current, VersionBump.MAJOR, "rc"
+            )
 
-            next_versions['minor_alpha'] = self.bump_version(current, VersionBump.MINOR, 'alpha')
-            next_versions['minor_beta'] = self.bump_version(current, VersionBump.MINOR, 'beta')
-            next_versions['minor_rc'] = self.bump_version(current, VersionBump.MINOR, 'rc')
+            next_versions["minor_alpha"] = self.bump_version(
+                current, VersionBump.MINOR, "alpha"
+            )
+            next_versions["minor_beta"] = self.bump_version(
+                current, VersionBump.MINOR, "beta"
+            )
+            next_versions["minor_rc"] = self.bump_version(
+                current, VersionBump.MINOR, "rc"
+            )
 
         return next_versions
 
     def detect_conflicts(
         self,
-        existing_versions: List[SemanticVersion],
-        proposed_version: SemanticVersion
-    ) -> List[str]:
+        existing_versions: list[SemanticVersion],
+        proposed_version: SemanticVersion,
+    ) -> list[str]:
         """
         Detect potential conflicts with existing versions
 
@@ -408,8 +429,8 @@ class VersionManager:
                 major_diff = latest.major - proposed_version.major
                 if major_diff > 1:
                     conflicts.append(
-                        f"Proposed version {proposed_version} is {major_diff} major versions "
-                        f"behind latest {latest}"
+                        f"Proposed version {proposed_version} is "
+                        f"{major_diff} major versions behind latest {latest}"
                     )
 
         # Check for suspicious jumps
@@ -434,9 +455,9 @@ class VersionManager:
 
     def suggest_version(
         self,
-        existing_versions: List[SemanticVersion],
+        existing_versions: list[SemanticVersion],
         change_description: str = "",
-        prefer_type: Optional[VersionBump] = None
+        prefer_type: VersionBump | None = None,
     ) -> SemanticVersion:
         """
         Suggest an appropriate next version based on existing versions and changes
@@ -464,11 +485,11 @@ class VersionManager:
         description_lower = change_description.lower()
 
         # Keywords that suggest major changes
-        major_keywords = ['breaking', 'incompatible', 'remove', 'deprecated', 'major']
+        major_keywords = ["breaking", "incompatible", "remove", "deprecated", "major"]
         # Keywords that suggest minor changes
-        minor_keywords = ['feature', 'add', 'new', 'enhance', 'minor']
+        minor_keywords = ["feature", "add", "new", "enhance", "minor"]
         # Keywords that suggest patch changes
-        patch_keywords = ['fix', 'bug', 'patch', 'typo', 'correction']
+        patch_keywords = ["fix", "bug", "patch", "typo", "correction"]
 
         if any(keyword in description_lower for keyword in major_keywords):
             return self.bump_version(latest, VersionBump.MAJOR)
@@ -481,9 +502,8 @@ class VersionManager:
             return self.bump_version(latest, VersionBump.PATCH)
 
     def get_version_history(
-        self,
-        versions: List[Tuple[SemanticVersion, datetime, str]]
-    ) -> List[Dict[str, Any]]:
+        self, versions: list[tuple[SemanticVersion, datetime, str]]
+    ) -> list[dict[str, Any]]:
         """
         Generate version history with metadata
 
@@ -498,11 +518,11 @@ class VersionManager:
 
         for i, (version, timestamp, description) in enumerate(sorted_versions):
             entry = {
-                'version': str(version),
-                'timestamp': timestamp.isoformat(),
-                'description': description,
-                'is_prerelease': version.is_prerelease,
-                'is_stable': version.is_stable
+                "version": str(version),
+                "timestamp": timestamp.isoformat(),
+                "description": description,
+                "is_prerelease": version.is_prerelease,
+                "is_stable": version.is_stable,
             }
 
             # Add progression analysis
@@ -511,21 +531,21 @@ class VersionManager:
 
                 # Calculate time between versions
                 time_diff = timestamp - prev_timestamp
-                entry['days_since_previous'] = time_diff.days
+                entry["days_since_previous"] = time_diff.days
 
                 # Determine bump type
                 comparison = self.compare_versions(prev_version, version)
                 if comparison < 0:
                     if version.major > prev_version.major:
-                        entry['bump_type'] = 'major'
+                        entry["bump_type"] = "major"
                     elif version.minor > prev_version.minor:
-                        entry['bump_type'] = 'minor'
+                        entry["bump_type"] = "minor"
                     elif version.patch > prev_version.patch:
-                        entry['bump_type'] = 'patch'
+                        entry["bump_type"] = "patch"
                     else:
-                        entry['bump_type'] = 'unknown'
+                        entry["bump_type"] = "unknown"
                 else:
-                    entry['bump_type'] = 'none' if comparison == 0 else 'downgrade'
+                    entry["bump_type"] = "none" if comparison == 0 else "downgrade"
 
             history.append(entry)
 
@@ -535,6 +555,7 @@ class VersionManager:
 # =========================================================================
 # Utility Functions
 # =========================================================================
+
 
 def parse_version_string(version_string: str) -> SemanticVersion:
     """Convenience function to parse a version string"""
@@ -551,9 +572,7 @@ def compare_version_strings(v1: str, v2: str) -> int:
 
 
 def bump_version_string(
-    version_string: str,
-    bump_type: VersionBump,
-    label: Optional[str] = None
+    version_string: str, bump_type: VersionBump, label: str | None = None
 ) -> str:
     """Convenience function to bump a version string"""
     vm = VersionManager()
@@ -567,6 +586,7 @@ def bump_version_string(
 # =========================================================================
 
 if __name__ == "__main__":
+
     def run_examples():
         """Run example usage of the versioning system"""
         print("🔢 Semantic Versioning System Examples")
@@ -612,7 +632,9 @@ if __name__ == "__main__":
 
         # Example 6: Version suggestion
         print("\n6. Version suggestion:")
-        suggested = vm.suggest_version(existing, "Added new feature for user management")
+        suggested = vm.suggest_version(
+            existing, "Added new feature for user management"
+        )
         print(f"   Suggested version: {suggested}")
 
         print("\n✅ Examples completed successfully!")

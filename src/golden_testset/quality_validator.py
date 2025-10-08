@@ -27,8 +27,7 @@ import asyncio
 import statistics
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Dict, List, Set
+from datetime import UTC, datetime
 
 import numpy as np
 from scipy import stats
@@ -41,6 +40,7 @@ from .manager import GoldenExample, GoldenTestset
 @dataclass
 class QualityMetrics:
     """Quality metrics for a golden testset"""
+
     diversity_score: float
     duplicate_count: int
     coverage_score: float
@@ -51,13 +51,13 @@ class QualityMetrics:
     def passes_quality_gates(self) -> bool:
         """Check if metrics pass all quality gates"""
         return (
-            self.diversity_score >= 0.7 and
-            self.duplicate_count == 0 and
-            self.coverage_score >= 0.9 and
-            self.distribution_p_value > 0.05
+            self.diversity_score >= 0.7
+            and self.duplicate_count == 0
+            and self.coverage_score >= 0.9
+            and self.distribution_p_value > 0.05
         )
 
-    def get_violations(self) -> List[str]:
+    def get_violations(self) -> list[str]:
         """Get list of quality gate violations"""
         violations = []
 
@@ -71,7 +71,9 @@ class QualityMetrics:
             violations.append(f"Coverage score {self.coverage_score:.3f} < 0.9")
 
         if self.distribution_p_value <= 0.05:
-            violations.append(f"Distribution p-value {self.distribution_p_value:.3f} <= 0.05")
+            violations.append(
+                f"Distribution p-value {self.distribution_p_value:.3f} <= 0.05"
+            )
 
         return violations
 
@@ -79,16 +81,17 @@ class QualityMetrics:
 @dataclass
 class ValidationResult:
     """Result of testset validation"""
+
     testset_name: str
     version: str
     metrics: QualityMetrics
     example_count: int
     validation_duration_ms: float
     passed: bool
-    violations: List[str]
-    recommendations: List[str]
+    violations: list[str]
+    recommendations: list[str]
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization"""
         return {
             "testset_name": self.testset_name,
@@ -99,24 +102,26 @@ class ValidationResult:
                 "coverage_score": self.metrics.coverage_score,
                 "semantic_coherence": self.metrics.semantic_coherence,
                 "distribution_p_value": self.metrics.distribution_p_value,
-                "validation_timestamp": self.metrics.validation_timestamp.isoformat()
+                "validation_timestamp": self.metrics.validation_timestamp.isoformat(),
             },
             "example_count": self.example_count,
             "validation_duration_ms": self.validation_duration_ms,
             "passed": self.passed,
             "violations": self.violations,
-            "recommendations": self.recommendations
+            "recommendations": self.recommendations,
         }
 
 
 class QualityValidator:
     """Statistical and semantic validator for golden testsets"""
 
-    def __init__(self,
-                 min_diversity_score: float = 0.7,
-                 min_coverage_score: float = 0.9,
-                 min_p_value: float = 0.05,
-                 semantic_similarity_threshold: float = 0.85):
+    def __init__(
+        self,
+        min_diversity_score: float = 0.7,
+        min_coverage_score: float = 0.9,
+        min_p_value: float = 0.05,
+        semantic_similarity_threshold: float = 0.85,
+    ):
         """
         Initialize quality validator
 
@@ -133,10 +138,7 @@ class QualityValidator:
 
         # Initialize TF-IDF vectorizer for semantic analysis
         self.vectorizer = TfidfVectorizer(
-            max_features=1000,
-            stop_words='english',
-            ngram_range=(1, 2),
-            lowercase=True
+            max_features=1000, stop_words="english", ngram_range=(1, 2), lowercase=True
         )
 
     async def validate_testset(self, testset: GoldenTestset) -> ValidationResult:
@@ -159,7 +161,9 @@ class QualityValidator:
         diversity_score = await self._calculate_diversity_score(questions)
         duplicate_count = await self._count_duplicates(questions)
         coverage_score = await self._calculate_coverage_score(examples)
-        semantic_coherence = await self._calculate_semantic_coherence(questions, ground_truths)
+        semantic_coherence = await self._calculate_semantic_coherence(
+            questions, ground_truths
+        )
         distribution_p_value = await self._test_distribution(examples)
 
         # Create metrics
@@ -169,7 +173,7 @@ class QualityValidator:
             coverage_score=coverage_score,
             semantic_coherence=semantic_coherence,
             distribution_p_value=distribution_p_value,
-            validation_timestamp=datetime.now(timezone.utc)
+            validation_timestamp=datetime.now(UTC),
         )
 
         # Check quality gates
@@ -182,16 +186,19 @@ class QualityValidator:
 
         return ValidationResult(
             testset_name=testset.name,
-            version=f"{testset.version_major}.{testset.version_minor}.{testset.version_patch}",
+            version=(
+                f"{testset.version_major}.{testset.version_minor}."
+                f"{testset.version_patch}"
+            ),
             metrics=metrics,
             example_count=len(examples),
             validation_duration_ms=duration_ms,
             passed=passed,
             violations=violations,
-            recommendations=recommendations
+            recommendations=recommendations,
         )
 
-    async def _calculate_diversity_score(self, questions: List[str]) -> float:
+    async def _calculate_diversity_score(self, questions: list[str]) -> float:
         """
         Calculate diversity score using TF-IDF and cosine similarity
 
@@ -239,7 +246,7 @@ class QualityValidator:
 
             return len(unique_words) / total_words
 
-    async def _count_duplicates(self, questions: List[str]) -> int:
+    async def _count_duplicates(self, questions: list[str]) -> int:
         """
         Count exact and near-duplicate questions
 
@@ -253,7 +260,9 @@ class QualityValidator:
 
         # Check exact duplicates
         question_counts = Counter(q.strip().lower() for q in questions)
-        exact_duplicates = sum(count - 1 for count in question_counts.values() if count > 1)
+        exact_duplicates = sum(
+            count - 1 for count in question_counts.values() if count > 1
+        )
         duplicate_count += exact_duplicates
 
         # Check semantic duplicates
@@ -265,10 +274,24 @@ class QualityValidator:
                 n = len(questions)
                 for i in range(n):
                     for j in range(i + 1, n):
-                        if similarity_matrix[i, j] >= self.semantic_similarity_threshold:
+                        if (
+                            similarity_matrix[i, j]
+                            >= self.semantic_similarity_threshold
+                        ):
                             # Only count if not already counted as exact duplicate
-                            key_pair = tuple(sorted([questions[i].strip().lower(), questions[j].strip().lower()]))
-                            if key_pair not in processed and questions[i].strip().lower() != questions[j].strip().lower():
+                            key_pair = tuple(
+                                sorted(
+                                    [
+                                        questions[i].strip().lower(),
+                                        questions[j].strip().lower(),
+                                    ]
+                                )
+                            )
+                            if (
+                                key_pair not in processed
+                                and questions[i].strip().lower()
+                                != questions[j].strip().lower()
+                            ):
                                 duplicate_count += 1
                                 processed.add(key_pair)
 
@@ -278,7 +301,7 @@ class QualityValidator:
 
         return duplicate_count
 
-    async def _calculate_coverage_score(self, examples: List[GoldenExample]) -> float:
+    async def _calculate_coverage_score(self, examples: list[GoldenExample]) -> float:
         """
         Calculate coverage score based on domain completeness
 
@@ -291,15 +314,23 @@ class QualityValidator:
 
         # 1. Question type diversity (using keywords/patterns)
         question_types = self._categorize_questions([ex.question for ex in examples])
-        type_diversity = len(question_types) / max(5, len(question_types))  # Normalize to expected types
+        type_diversity = len(question_types) / max(
+            5, len(question_types)
+        )  # Normalize to expected types
         coverage_factors.append(min(1.0, type_diversity))
 
         # 2. Difficulty distribution (if available)
-        difficulties = [ex.ragas_difficulty for ex in examples if ex.ragas_difficulty is not None]
+        difficulties = [
+            ex.ragas_difficulty for ex in examples if ex.ragas_difficulty is not None
+        ]
         if difficulties:
             # Check for reasonable spread across difficulty levels
-            difficulty_std = statistics.stdev(difficulties) if len(difficulties) > 1 else 0
-            difficulty_coverage = min(1.0, difficulty_std / 2.0)  # Normalize by reasonable std
+            difficulty_std = (
+                statistics.stdev(difficulties) if len(difficulties) > 1 else 0
+            )
+            difficulty_coverage = min(
+                1.0, difficulty_std / 2.0
+            )  # Normalize by reasonable std
             coverage_factors.append(difficulty_coverage)
 
         # 3. Context variety (if contexts provided)
@@ -316,36 +347,42 @@ class QualityValidator:
         # 4. Answer length variety
         answer_lengths = [len(ex.ground_truth.split()) for ex in examples]
         if answer_lengths:
-            length_std = statistics.stdev(answer_lengths) if len(answer_lengths) > 1 else 0
+            length_std = (
+                statistics.stdev(answer_lengths) if len(answer_lengths) > 1 else 0
+            )
             length_coverage = min(1.0, length_std / 10.0)  # Normalize
             coverage_factors.append(length_coverage)
 
         # Return average of all coverage factors
-        return sum(coverage_factors) / len(coverage_factors) if coverage_factors else 0.0
+        return (
+            sum(coverage_factors) / len(coverage_factors) if coverage_factors else 0.0
+        )
 
-    def _categorize_questions(self, questions: List[str]) -> Set[str]:
+    def _categorize_questions(self, questions: list[str]) -> set[str]:
         """Categorize questions by type/intent"""
         categories = set()
 
         for question in questions:
             q_lower = question.lower()
 
-            if any(word in q_lower for word in ['what', 'define', 'explain']):
-                categories.add('definition')
-            elif any(word in q_lower for word in ['how', 'process', 'steps']):
-                categories.add('procedural')
-            elif any(word in q_lower for word in ['why', 'reason', 'cause']):
-                categories.add('causal')
-            elif any(word in q_lower for word in ['compare', 'difference', 'versus']):
-                categories.add('comparative')
-            elif any(word in q_lower for word in ['list', 'enumerate', 'examples']):
-                categories.add('enumeration')
+            if any(word in q_lower for word in ["what", "define", "explain"]):
+                categories.add("definition")
+            elif any(word in q_lower for word in ["how", "process", "steps"]):
+                categories.add("procedural")
+            elif any(word in q_lower for word in ["why", "reason", "cause"]):
+                categories.add("causal")
+            elif any(word in q_lower for word in ["compare", "difference", "versus"]):
+                categories.add("comparative")
+            elif any(word in q_lower for word in ["list", "enumerate", "examples"]):
+                categories.add("enumeration")
             else:
-                categories.add('general')
+                categories.add("general")
 
         return categories
 
-    async def _calculate_semantic_coherence(self, questions: List[str], ground_truths: List[str]) -> float:
+    async def _calculate_semantic_coherence(
+        self, questions: list[str], ground_truths: list[str]
+    ) -> float:
         """
         Calculate semantic coherence between questions and answers
 
@@ -388,7 +425,7 @@ class QualityValidator:
 
             return np.mean(coherence_scores) if coherence_scores else 0.0
 
-    async def _test_distribution(self, examples: List[GoldenExample]) -> float:
+    async def _test_distribution(self, examples: list[GoldenExample]) -> float:
         """
         Test distribution properties using chi-square test
 
@@ -423,14 +460,18 @@ class QualityValidator:
             # Fallback: assume uniform distribution
             return 1.0
 
-    async def _generate_recommendations(self, metrics: QualityMetrics, examples: List[GoldenExample]) -> List[str]:
+    async def _generate_recommendations(
+        self, metrics: QualityMetrics, examples: list[GoldenExample]
+    ) -> list[str]:
         """Generate recommendations for improving testset quality"""
         recommendations = []
 
         if metrics.diversity_score < self.min_diversity_score:
             recommendations.append(
-                f"Increase question diversity (current: {metrics.diversity_score:.3f}). "
-                "Add questions covering different topics, phrasings, and complexity levels."
+                f"Increase question diversity "
+                f"(current: {metrics.diversity_score:.3f}). "
+                "Add questions covering different topics, phrasings, and "
+                "complexity levels."
             )
 
         if metrics.duplicate_count > 0:
@@ -447,7 +488,8 @@ class QualityValidator:
 
         if metrics.semantic_coherence < 0.5:
             recommendations.append(
-                f"Improve question-answer alignment (current: {metrics.semantic_coherence:.3f}). "
+                f"Improve question-answer alignment "
+                f"(current: {metrics.semantic_coherence:.3f}). "
                 "Ensure answers directly address the questions asked."
             )
 
@@ -459,7 +501,10 @@ class QualityValidator:
 
         # General recommendations based on testset size
         if len(examples) < 10:
-            recommendations.append("Consider adding more examples for better statistical validity (minimum 10 recommended).")
+            recommendations.append(
+                "Consider adding more examples for better statistical "
+                "validity (minimum 10 recommended)."
+            )
 
         return recommendations
 

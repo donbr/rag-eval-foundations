@@ -13,8 +13,8 @@ wheels/
 .env
 
 # Data and Draft files
-/data/*
-!/data/.gitkeep
+#/data/*
+#/data/.gitkeep
 /draft/*
 !/draft/.gitkeep
 

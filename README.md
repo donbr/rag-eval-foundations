@@ -31,7 +31,7 @@ You're building:
 2. **Stage 2**: Automated test generation with RAGAS golden datasets
 3. **Stage 3**: Systematic evaluation with metrics and experiment tracking
 
-Think of it as a complete RAG evaluation laboratory, with John Wick movie reviews as your test subject. By the end, you'll have objective metrics telling you which retrieval strategy performs best.
+Think of it as a complete RAG evaluation laboratory, with research PDFs (AI/HCI literature) as your test dataset. By the end, you'll have objective metrics telling you which retrieval strategy performs best.
 
 ## 🎯 The Complete 3-Stage Pipeline
 
@@ -154,7 +154,7 @@ python claude_code_scripts/run_rag_evaluation_pipeline.py --help
 ### Pipeline Steps Executed
 
 1. **Main E2E Pipeline** (`langchain_eval_foundations_e2e.py`)
-   - Downloads John Wick review data
+   - Loads documents from configured sources (PDFs by default)
    - Creates PostgreSQL vector stores
    - Tests 6 retrieval strategies
    - Generates Phoenix traces
@@ -167,6 +167,36 @@ python claude_code_scripts/run_rag_evaluation_pipeline.py --help
    - Runs systematic evaluation on all strategies
    - Calculates QA correctness and relevance scores
    - Creates detailed experiment reports in Phoenix
+
+### 📁 Data Source Configuration
+
+The pipeline supports multiple document formats and can be configured via the Config class in `langchain_eval_foundations_e2e.py`:
+
+**Default Configuration (current):**
+```python
+load_pdfs: bool = True      # Research PDFs from data/ directory (enabled)
+load_csvs: bool = False     # CSV datasets (disabled by default)
+load_markdowns: bool = True # Markdown documents (enabled)
+```
+
+**Data Sources by Type:**
+- **PDFs**: Research papers, technical documents (AI/HCI literature included)
+- **CSVs**: Structured datasets with metadata columns
+- **Markdown**: Documentation files split on header boundaries
+
+**Example Data Included:**
+- Current dataset: 269 PDF documents on human-LLM interaction and AI usage research
+- Topics: Prompt engineering, trust calibration, cognitive collaboration, interface design
+
+**To use different data:**
+1. Place your PDFs in `data/` directory
+2. Update config flags in `langchain_eval_foundations_e2e.py`
+3. Run the pipeline - system automatically adapts to your documents
+
+**Example queries for current research data:**
+- "What factors influence user trust in AI systems?"
+- "How do novice users struggle with prompt engineering?"
+- "What design strategies mitigate automation bias?"
 
 ### Logs and Output
 
@@ -280,13 +310,13 @@ python src/langchain_eval_foundations_e2e.py
 ```
 
 **What should happen:**
-1. 📥 Downloads John Wick review data (because who doesn't love Keanu?)
+1. 📥 Loads research PDF documents (AI/HCI literature from the data/ directory)
 2. 🗄️ Creates fancy vector tables in PostgreSQL
 3. 🔍 Tests 6 different ways to search for information
 4. 📊 Shows you which method gives the best answers
 5. 🕵️ Sends traces to Phoenix UI at `http://localhost:6006`
 
-**Expected runtime:** 2-5 minutes (perfect time to practice your John Wick pencil tricks)
+**Expected runtime:** 2-5 minutes (depending on number of PDFs loaded)
 
 ---
 
@@ -329,7 +359,7 @@ python src/langchain_eval_foundations_e2e.py
 ### When All Else Fails: The Claude/ChatGPT Lifeline
 
 Copy your error message and ask:
-> "I'm running this RAG evaluation foundations setup with LangChain, PostgreSQL, and Phoenix. I'm getting this error: [paste error]. The code is supposed to compare different retrieval strategies for John Wick movie reviews. What's going wrong?"
+> "I'm running this RAG evaluation foundations setup with LangChain, PostgreSQL, and Phoenix. I'm getting this error: [paste error]. The code is supposed to compare different retrieval strategies for research PDFs. What's going wrong?"
 
 **Why this works:** AI assistants are surprisingly good at debugging, especially when you give them context. They won't judge you for that typo in line 47.
 
@@ -353,7 +383,7 @@ find . -type d -name __pycache__ -exec rm -rf {} +
 - ✅ The script runs without errors
 - ✅ You see a DataFrame with 6 different responses
 - ✅ Phoenix UI at `http://localhost:6006` shows your traces (click on a trace to see the full execution flow)
-- ✅ PostgreSQL has tables full of John Wick wisdom
+- ✅ PostgreSQL has tables full of research document embeddings
 - ✅ You feel like a wizard who just summoned 6 different search spirits
 
 ### What You've Actually Built:
@@ -381,7 +411,7 @@ Remember: every AI engineer has been exactly where you are right now. The differ
 
 **You're building a complete evaluation pipeline** while learning the vocabulary. Understanding how BM25 differs from semantic search, why ensemble methods matter, and what Phoenix traces tell you about retriever performance. This hands-on experience is what separates engineers who can copy-paste code from those who can architect real solutions. ([Learn more about retrieval strategies →](https://deepwiki.com/donbr/rag-eval-foundations))
 
-You're not just running code; you're learning to **think in retrievers** with a complete toolkit at your disposal. John Wick would be proud.
+You're not just running code; you're learning to **think in retrievers** with a complete toolkit at your disposal.
 
 **What's next for you:** Now that you have the complete pipeline, you can:
 - Customize evaluation metrics for your domain
@@ -442,8 +472,8 @@ python claude_code_scripts/run_rag_evaluation_pipeline.py
 python validation/postgres_data_analysis.py
 ```
 **Purpose:** Comprehensive analysis of the vector database
-- Analyzes document distribution across John Wick movies
-- Compares baseline vs semantic chunking strategies  
+- Analyzes document distribution and metadata
+- Compares baseline vs semantic chunking strategies
 - Generates PCA visualization of embeddings
 - **Outputs:** Creates 3 PNG charts in `outputs/charts/postgres_analysis/`
 
@@ -482,9 +512,9 @@ python validation/retrieval_strategy_comparison.py
 
 ### Performance Benchmarks
 - Data loading: 30-60 seconds
-- Embedding generation: 1-2 minutes for ~100 reviews
+- Embedding generation: 2-4 minutes for ~269 PDF documents
 - Retrieval comparison: 30-60 seconds
-- Total runtime: 2-5 minutes
+- Total runtime: 3-6 minutes (varies with PDF count)
 
 📈 **For detailed performance analysis**: Check out [DeepWiki's performance insights](https://deepwiki.com/donbr/rag-eval-foundations) including:
 - Strategy-by-strategy latency comparisons

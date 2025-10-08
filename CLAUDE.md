@@ -2,13 +2,50 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Quick Reference
+
+**Most Common Commands:**
+```bash
+# Complete setup and run pipeline
+uv venv --python 3.13 && source .venv/bin/activate
+uv sync
+python claude_code_scripts/run_rag_evaluation_pipeline.py
+
+# Verify environment
+python --version  # Should be 3.13.x or higher
+python -c "import langchain, openai, cohere, ragas; print('✅ Core dependencies verified')"
+
+# Verify services are running
+docker ps --filter 'label=project=rag-eval-foundations'
+PGPASSWORD=langchain psql -h localhost -p 6024 -U langchain -d langchain -c "\dt"
+
+# Code quality checks
+ruff check src/ --fix && ruff format src/
+
+# Run validation suite
+python validation/postgres_data_analysis.py
+python validation/retrieval_strategy_comparison.py
+```
+
+**Troubleshooting Quick Index:**
+- [Service port conflicts](#service-port-conflicts)
+- [Vector search returns no results](#vector-search-returns-no-results)
+- [Phoenix connection issues](#phoenix-connection-issues)
+- [API rate limits](#api-rate-limits)
+- [Async event loop errors](#async-event-loop-errors)
+
 ## Project Overview
 
-This is a complete 3-stage RAG (Retrieval-Augmented Generation) evaluation pipeline that compares different retrieval strategies using **research PDF documents** as the primary data source. The project implements a full toolkit including infrastructure setup, RAGAS golden test set generation, and automated evaluation with metrics.
+A production-ready 3-stage RAG evaluation pipeline implementing 6 retrieval strategies with RAGAS-based golden testset generation and Phoenix observability. The project includes Phase 4 golden testset management with PostgreSQL-backed versioning, cost tracking, and quality validation.
 
-**Current Focus**: The system is configured to work with LLM interaction research documents (`llm-interaction-literature-review.pdf`, `howpeopleuseai.pdf`) and supports flexible document loading (`load_pdfs: true`, `load_csvs: false`). The project provides a general-purpose RAG evaluation platform while maintaining backwards compatibility with various document types.
+**Key Features**:
+- **6 Retrieval Strategies**: Naive vector, semantic chunking, BM25, contextual compression, multi-query, ensemble
+- **Phase 4 Golden Testset System**: Database-backed versioning with semantic versioning (major.minor.patch)
+- **Cost Tracking**: Phoenix-integrated token usage and API cost monitoring
+- **Quality Validation**: RAGAS metrics with configurable thresholds
+- **Full Observability**: Phoenix tracing for all LLM operations
 
-**Validated Performance** (July 2025): Complete pipeline tested and operational with 269 PDF documents, 6 retrieval strategies, full Phoenix observability, and comprehensive validation scripts. All core functionality verified working.
+**Current Status** (As of October 2025): Complete pipeline tested with 269 PDF documents, full Phoenix integration, database-backed testset management, and comprehensive validation tooling.
 
 ## Key Commands
 
@@ -17,6 +54,9 @@ This is a complete 3-stage RAG (Retrieval-Augmented Generation) evaluation pipel
 **IMPORTANT**: This project requires Python 3.13+ and uses `uv` for package management.
 
 ```bash
+# Verify Python version first
+python --version  # Must show 3.13.x or higher
+
 # Install uv if not already installed
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -32,6 +72,14 @@ uv sync
 
 # Verify critical dependencies
 python -c "import langchain, openai, cohere, ragas, pypdf, matplotlib, seaborn, psycopg2, asyncpg; print('All dependencies verified')"
+
+# Validate environment variables are set
+python -c "
+import os
+required = ['OPENAI_API_KEY', 'COHERE_API_KEY']
+missing = [k for k in required if not os.getenv(k)]
+print('✅ All required API keys set' if not missing else f'❌ Missing: {missing}')
+"
 ```
 
 **Key Dependencies** (automatically installed via `uv sync`):
@@ -79,11 +127,39 @@ python validation/retrieval_strategy_comparison.py
 ```bash
 # Essential validation sequence (run after main pipeline)
 python validation/postgres_data_analysis.py        # Database analysis
-python validation/retrieval_strategy_comparison.py # Strategy benchmarking  
+python validation/retrieval_strategy_comparison.py # Strategy benchmarking
 python validation/validate_telemetry.py           # Phoenix tracing validation
 
 # Dependency verification
 python -c "import langchain, openai, cohere, ragas, pypdf, matplotlib, seaborn, psycopg2, asyncpg; print('All dependencies verified')"
+```
+
+#### Database Operations
+```bash
+# Connect to PostgreSQL
+psql -h localhost -p 6024 -U langchain -d langchain
+
+# Or use PGPASSWORD for scripting
+PGPASSWORD=langchain psql -h localhost -p 6024 -U langchain -d langchain
+
+# Query golden testsets
+PGPASSWORD=langchain psql -h localhost -p 6024 -U langchain -d langchain -c "
+  SELECT name, version_major, version_minor, version_patch, created_at
+  FROM golden_testsets
+  ORDER BY created_at DESC
+  LIMIT 10;"
+
+# Get latest version of a testset
+PGPASSWORD=langchain psql -h localhost -p 6024 -U langchain -d langchain -c "
+  SELECT get_latest_testset_version('financial_aid_baseline');"
+
+# Check testset overview (uses view)
+PGPASSWORD=langchain psql -h localhost -p 6024 -U langchain -d langchain -c "
+  SELECT * FROM testset_overview;"
+
+# Count documents in vector stores
+PGPASSWORD=langchain psql -h localhost -p 6024 -U langchain -d langchain -c "
+  SELECT COUNT(*) FROM mixed_baseline_documents;"
 ```
 
 #### Log Management
@@ -96,10 +172,9 @@ tail -f logs/rag_evaluation_$(date +%Y%m%d)*.log
 
 # Clean old logs (keep last 10)
 ls -t logs/*.log | tail -n +11 | xargs rm -f
-
 ```
 
-**Note:** 
+**Note:**
 - Run the main pipeline first to populate data before using validation scripts
 - Validation scripts are updated to work with the current PDF-based data (financial aid documents)
 - Scripts generate visualizations in `outputs/charts/` with data distributions, embedding analysis, and performance comparisons
@@ -175,6 +250,50 @@ docker run -it --rm --name phoenix-container \
   arizephoenix/phoenix:latest
 ```
 
+## Configuration System
+
+**Centralized Configuration:**
+All scripts use a centralized configuration system via `src/config.py`. This provides a single source of truth for all settings with environment variable overrides.
+
+```python
+from config import (
+    PHOENIX_ENDPOINT,          # http://localhost:6006
+    GOLDEN_TESTSET_NAME,       # mixed_golden_testset_phoenix
+    LLM_MODEL,                 # gpt-4.1-mini (enforced)
+    EMBEDDING_MODEL,           # text-embedding-3-small (enforced)
+    COHERE_RERANK_MODEL,       # rerank-english-v3.0
+    get_postgres_async_url,    # Helper for DB connection
+    BASELINE_TABLE,            # mixed_baseline_documents
+    SEMANTIC_TABLE,            # mixed_semantic_documents
+)
+```
+
+**Benefits:**
+- ✅ Single source of truth for all configuration
+- ✅ Consistent dataset naming across upload/experiments/golden_testset scripts
+- ✅ Model enforcement per CLAUDE.md requirements
+- ✅ Environment variable support with sensible defaults
+- ✅ Type-safe dataclasses with validation
+
+**Environment Variables** (`.env` file):
+
+Required:
+- `OPENAI_API_KEY`: OpenAI API key for embeddings and LLM
+- `COHERE_API_KEY`: Cohere API key for reranking
+
+Optional (with defaults):
+- `PHOENIX_ENDPOINT`: Phoenix UI endpoint (default: http://localhost:6006)
+- `PHOENIX_OTLP_ENDPOINT`: OTLP collector (default: http://localhost:4317)
+- `POSTGRES_HOST`: Database host (default: localhost)
+- `POSTGRES_PORT`: Database port (default: 6024)
+- `GOLDEN_TESTSET_SIZE`: Testset size (default: 10)
+
+**SECURITY NOTE**: Never commit `.env` files or hardcode API keys. Always use `.env.example` as a template with placeholder values only.
+
+See `.env.example` for complete list and `src/config.py` for all configuration options.
+
+---
+
 ## Architecture
 
 ### Core Components
@@ -184,7 +303,7 @@ docker run -it --rm --name phoenix-container \
    - **Secondary**: CSV ingestion from various datasets (optional, disabled by default)
    - Async document processing with metadata enrichment
    - PostgreSQL/pgvector storage with 1536-dimension embeddings
-   
+
 2. **Retrieval Architecture**:
    - **Factory Pattern**: `create_retrievers()` provides unified interface
    - **Async-First Design**: All operations use `asyncio` and `PGEngine` connection pooling
@@ -196,7 +315,7 @@ docker run -it --rm --name phoenix-container \
      - Multi-Query (LLM-generated query variations)
      - Ensemble (Reciprocal Rank Fusion with equal weights)
 
-3. **Complete 3-Stage Evaluation Pipeline**: 
+3. **Complete 3-Stage Evaluation Pipeline**:
    - **Stage 1**: Infrastructure setup and manual strategy comparison
    - **Stage 2**: RAGAS golden test set generation with LLM wrappers
    - **Stage 3**: Automated evaluation with Phoenix experiment framework
@@ -258,70 +377,37 @@ docker run -it --rm --name phoenix-container \
 - **Chain Composition**: Standardized RAG chains for fair comparison
 - **Error Handling**: Graceful degradation with structured logging
 
-### Environment Variables
-Required in `.env` file:
-- `OPENAI_API_KEY`
-- `COHERE_API_KEY`
-- `POSTGRES_CONNECTION_STRING` (optional, uses default if not set)
-- `PHOENIX_CLIENT_HEADERS` (for tracing authentication)
-- `PHOENIX_COLLECTOR_ENDPOINT` (defaults to http://localhost:6006)
+### Development Tools & Code Quality
 
-Optional configuration:
-- `GOLDEN_TESTSET_SIZE` (number of examples to generate in golden test set, defaults to 10)
+The project uses **Ruff** for linting and formatting (replaces black, flake8, and isort).
 
-### Development Tools & Code Quality (2025 Best Practices)
-
-The project uses modern Python development practices with **Ruff** for linting and formatting, and includes development dependencies via UV's dependency groups.
-
-#### ✅ **Validated Development Dependencies**
 ```bash
-# Add development tools (tested and working)
-uv add --dev ruff mypy pytest pre-commit
-
-# Dependencies are stored in pyproject.toml under [dependency-groups]
-# Current dev dependencies: ruff>=0.12.1, mypy>=1.16.1, pytest>=8.4.1
-```
-
-#### ✅ **Tested Code Quality Commands**
-```bash
-# Lint and check code (tested working)
+# Lint and check code
 ruff check src/ validation/ claude_code_scripts/
 
-# Format code (tested working)
+# Format code
 ruff format src/ validation/ claude_code_scripts/
 
-# Fix auto-fixable issues (tested working)
+# Fix auto-fixable issues
 ruff check --fix src/ validation/ claude_code_scripts/
 
-# Type checking (tested working)
-mypy --version  # Confirms mypy 1.16.1 available
+# Type checking with mypy
+mypy src/
 
 # Check for issues without fixing
 ruff check src/ --no-fix
 ```
 
-#### 🔧 **Optional pyproject.toml Configuration**
-Add tool configurations as needed:
-```toml
-[tool.ruff]
-line-length = 88
-target-version = "py313"
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP"]
-
-[tool.mypy]
-python_version = "3.13"
-warn_return_any = true
-warn_unused_configs = true
-```
-
-**Note**: All commands above have been tested and verified working in this environment. Ruff successfully replaces black, flake8, and isort as a unified tool.
+Configuration is in `pyproject.toml`:
+- Line length: 88 characters
+- Target: Python 3.13
+- Selected rules: E, F, I, N, W, UP
+- Development dependencies: ruff>=0.12.1, mypy>=1.16.1, pytest>=8.4.1
 
 ### Quick Validation Commands
 
 ```bash
-# Verify the complete system works (tested July 2025)
+# Verify the complete system works
 python claude_code_scripts/run_rag_evaluation_pipeline.py --skip-services --testset-size 3
 
 # Run individual validation scripts
@@ -337,20 +423,27 @@ These commands provide quick verification that all components are working correc
 
 ## Development Notes
 
-### Data Structure
-**Primary Data (PDF Documents)**:
-- Research PDFs stored in `data/` directory:
-  - `llm-interaction-literature-review.pdf` - Comprehensive review of human-LLM interaction research
-  - `howpeopleuseai.pdf` - Study on AI usage patterns and behaviors
-  - `llm-interaction-literature-review.md` - Markdown version for enhanced processing
-- Document metadata: `document_name`, `source_type`, `last_accessed_at`
-- Tables: `mixed_baseline_documents` and `mixed_semantic_documents`
+### Database Schema Architecture
 
-**Secondary Data (CSV, Optional)**:
-- Movie reviews stored in `data/john_wick_[1-4].csv`
-- Each review contains: Review_Title, Review_Text, Rating, Movie_Title
-- Metadata includes: Review_Date, Author, Review_Url, last_accessed_at
-- Golden test set in `data/mixed_golden_testset_phoenix.json`
+**Vector Store Tables** (PGVector):
+- `mixed_baseline_documents`: Standard chunking with OpenAI embeddings (1536-dim)
+- `mixed_semantic_documents`: SemanticChunker-based chunking with embeddings
+- Both use pgvector's HNSW indexing for similarity search
+
+**Phase 4 Golden Testset Tables** (src/golden_testset/):
+- `golden_testsets`: Testset metadata with semantic versioning (major.minor.patch)
+- `golden_examples`: Individual examples linked to testsets
+- Uses UUIDs, timestamps, and versioning for full traceability
+
+**Database Utilities** (scripts/db/):
+- `assert_schema.py`: Validate required tables, views, indexes exist
+- `assert_indexes.py`: Verify performance-critical indexes
+- `dry_run_sql.py`: Test SQL migrations safely before execution
+
+**Data Sources**:
+- **Primary**: PDF documents in `data/` (research papers, literature reviews)
+- **Secondary**: CSV datasets (optional, disabled by default)
+- Configuration in `src/config.py` controls which sources are loaded
 
 ### Phoenix Observability
 
@@ -420,7 +513,6 @@ export PHOENIX_UI_PORT=6007
 export PHOENIX_OTLP_PORT=4318
 ```
 
-
 #### Async Event Loop Errors
 - Common in Jupyter notebooks - use `asyncio.run()` for standalone scripts
 - Ensure proper async context management with `PGEngine`
@@ -428,52 +520,107 @@ export PHOENIX_OTLP_PORT=4318
 
 ### Code Organization
 
-Key files and their purposes:
-- `langchain_eval_foundations_e2e.py`: Main evaluation pipeline
-- `langchain_eval_golden_testset.py`: RAGAS test set generation
-- `langchain_eval_experiments.py`: Experimental evaluation approaches
-- `retrieval_strategy_comparison.py`: Interactive comparison tool
-- `data_loader.py`: Data ingestion utilities
-- `notebooks/`: Analysis and validation tools
-
-### Golden Testset Flow Architecture Decision
-
-**Current Implementation: Hybrid Approach (September 2025)**
-
-After evaluation of clean vs. hybrid implementations, the project uses a **hybrid architecture** that combines:
-
-#### **Flow Files:**
-- **`flows/golden_testset_flow.py`**: Main hybrid implementation with:
-  - Clean Prefect 3.x core (1:1 YAML mapping, explicit future resolution)
-  - Optional enterprise features (Git workflow, quality gates, monitoring, cost tracking)
-  - Dual CLI modes: Simple development (`--only-phase`) and advanced production (`--production`)
-
-- **`flows/golden_testset_flow_alternate.py`**: Reference clean implementation (archived)
-- **`flows/golden_testset_flow_prefect3.py`**: Clean Prefect 3.x source (archived)
-
-#### **CI/CD Workflows:**
-- **`.github/workflows/ci.yaml`**: Basic development workflow for simple testing
-- **`.github/workflows/golden-testset-ci.yaml`**: Comprehensive enterprise workflow with:
-  - Integration tests with PostgreSQL
-  - Security scanning and performance validation
-  - Deployment readiness checks
-
-#### **Usage Patterns:**
-```bash
-# Simple development (uses clean core)
-python flows/golden_testset_flow.py --only-phase phase1
-
-# Enterprise mode (uses optional features)
-python flows/golden_testset_flow.py --production --enable-quality-gates
-
-# CI/CD triggers appropriate workflow based on changes
+**Source Structure** (`src/`):
+```
+src/
+├── config.py                           # Centralized configuration
+├── data_loader.py                      # Data ingestion utilities
+├── langchain_eval_foundations_e2e.py   # Stage 1: Main evaluation pipeline
+├── langchain_eval_golden_testset.py    # Stage 2: RAGAS testset generation
+├── langchain_eval_experiments.py       # Stage 3: Automated evaluation
+├── upload_golden_testset_to_phoenix.py # Phoenix dataset upload
+└── golden_testset/                     # Phase 4: Testset management
+    ├── manager.py                      # CRUD operations
+    ├── versioning.py                   # Semantic versioning
+    ├── quality_validator.py            # RAGAS quality gates
+    ├── cost_tracker.py                 # Cost tracking
+    ├── phoenix_integration.py          # Phoenix upload integration
+    ├── change_detector.py              # Change detection
+    ├── transactions.py                 # Database transactions
+    ├── validation_pipeline.py          # Validation orchestration
+    └── tracing.py                      # OpenTelemetry tracing
 ```
 
-#### **Rationale:**
-- **Flexibility**: Clean execution when simple, enterprise features when needed
-- **Growth Path**: Scales from development to production environments
-- **Backward Compatibility**: Supports both basic and advanced use cases
-- **Prefect 3.x Ready**: Modern async patterns with explicit future resolution
+**Scripts** (`scripts/`):
+```
+scripts/
+├── db/                                 # Database utilities
+│   ├── assert_schema.py               # Schema validation
+│   ├── assert_indexes.py              # Index verification
+│   ├── dry_run_sql.py                 # Safe SQL testing
+│   ├── db_connection.py               # Connection pooling
+│   └── db_migrate.py                  # Migration runner
+└── validation/                         # Pre-push validation
+    ├── check_implementation_status.py  # Task completion checks
+    ├── validate_branch_phase.py        # Branch-phase alignment
+    └── detect_scope_creep.py           # Scope validation
+```
+
+**Validation** (`validation/`):
+```
+validation/
+├── postgres_data_analysis.py           # Database analysis & visualization
+├── retrieval_strategy_comparison.py    # Interactive strategy benchmarks
+└── validate_telemetry.py               # Phoenix tracing validation
+```
+
+### Phase 4: Golden Testset Management System
+
+**Architecture**: Database-backed versioning with Phoenix cost integration (implemented October 2025)
+
+#### **Core Components** (src/golden_testset/):
+
+**Manager** (`manager.py`):
+- `GoldenTestsetManager`: CRUD operations with async context manager
+- Semantic versioning (major.minor.patch) with automatic version bumping
+- Transaction support via `transactions.py` for atomic operations
+- Example:
+  ```python
+  async with GoldenTestsetManager() as mgr:
+      testset = await mgr.create_testset(name="baseline", examples=[...])
+      v2 = await mgr.update_testset(testset.id, examples=[...], change_type="minor")
+  ```
+
+**Versioning** (`versioning.py`):
+- `SemanticVersion`: Version comparison, bumping (major/minor/patch)
+- `VersionManager`: Query latest versions, version history, diffs
+- Database views: `latest_testsets`, `testset_overview`
+
+**Cost Tracking** (`cost_tracker.py`, `phoenix_integration.py`):
+- `PhoenixCostTracker`: Extract token usage and costs from Phoenix traces
+- `PhoenixIntegration`: Upload testsets to Phoenix with versioned dataset names
+- Integration with OpenAI and Cohere API pricing
+
+**Quality Validation** (`quality_validator.py`):
+- `QualityValidator`: Check RAGAS metrics against thresholds
+- Configurable gates for context_precision, faithfulness, answer_relevancy
+- Validation pipeline in `validation_pipeline.py`
+
+**Change Detection** (`change_detector.py`):
+- Detect semantic changes in testset updates
+- Recommend appropriate version bumps (major/minor/patch)
+- Support intelligent versioning decisions
+
+#### **Database Schema Validation**:
+```bash
+# Validate all schema requirements
+python scripts/db/assert_schema.py --check all
+
+# Check specific tables
+python scripts/db/assert_schema.py --require tables=golden_testsets,golden_examples
+
+# Verify indexes exist
+python scripts/db/assert_indexes.py
+
+# Test SQL before running
+python scripts/db/dry_run_sql.py --sql "SELECT get_latest_testset_version('baseline');"
+```
+
+#### **Key Design Decisions**:
+- **PostgreSQL over JSON files**: ACID transactions, concurrent access, query capabilities
+- **Semantic versioning**: Clear version progression with major/minor/patch
+- **Phoenix integration**: Unified observability for costs and quality
+- **Async-first**: All DB operations use asyncpg for performance
 
 ### Extending the Framework
 
@@ -483,7 +630,7 @@ python flows/golden_testset_flow.py --production --enable-quality-gates
    def create_retrievers(baseline_vectorstore, semantic_vectorstore, all_docs, llm):
        # Add your new retriever
        custom_retriever = YourCustomRetriever(...)
-       
+
        return {
            "existing_strategies": ...,
            "your_strategy": custom_retriever
@@ -537,15 +684,58 @@ docker stats rag-eval-pgvector rag-eval-phoenix
 
 ### Testing and Validation Requirements
 
-**IMPORTANT**: When creating or modifying scripts, Claude Code MUST test and validate the functionality:
+**Test Structure** (tests/):
+```
+tests/
+├── unit/                                   # Unit tests with pytest
+│   ├── test_golden_testset_manager.py     # Manager CRUD operations
+│   ├── test_quality_validator.py          # Quality validation logic
+│   └── ...
+├── integration/                            # Integration tests (future)
+└── fixtures/                               # Test data and mocks
+```
 
-1. **Script Creation**: Always run newly created scripts to verify they work correctly
-2. **Integration Testing**: Test complete pipelines end-to-end when orchestration scripts are created
-3. **Log Verification**: Confirm that logging features work as designed by executing the code
-4. **Error Handling**: Test error conditions when possible to validate error handling works
-5. **Documentation Accuracy**: Ensure that documented features actually work as described
+**Running Tests**:
+```bash
+# Run all unit tests
+python -m pytest tests/unit/ -v
 
-**Refusing to run tests is unacceptable** - validation through execution is a core requirement for reliable code delivery.
+# Run specific test file
+python -m pytest tests/unit/test_golden_testset_manager.py -v
+
+# Run with coverage
+python -m pytest tests/unit/ --cov=src/golden_testset --cov-report=html
+
+# Run validation scripts (requires running services)
+python validation/postgres_data_analysis.py
+python validation/retrieval_strategy_comparison.py
+python validation/validate_telemetry.py
+```
+
+**Validation Scripts** (scripts/validation/):
+
+*Note: These scripts are obsolete as they depend on .claude/tasks.yaml which has been removed along with Prefect flows.*
+
+**Database Validation**:
+```bash
+# Validate schema
+python scripts/db/assert_schema.py --check all
+
+# Verify indexes
+python scripts/db/assert_indexes.py
+
+# Test SQL safely
+python scripts/db/dry_run_sql.py --sql "SELECT * FROM testset_overview LIMIT 5;"
+```
+
+**Testing Philosophy**:
+1. **Script Creation**: Always run newly created scripts to verify they work
+2. **Integration Testing**: Test complete pipelines end-to-end
+3. **Log Verification**: Confirm logging works by executing code
+4. **Error Handling**: Test error conditions where possible
+5. **Documentation Accuracy**: Ensure documented features work as described
+
+**Validation through execution is required** - not optional.
 
 ### Current Data Configuration
 
@@ -560,7 +750,7 @@ golden_testset_size: int = 10  # Number of examples in RAGAS golden test set
 
 **To switch data sources**:
 - For PDF-only processing (current): `load_pdfs=True, load_csvs=False`
-- For CSV-only processing: `load_pdfs=False, load_csvs=True`  
+- For CSV-only processing: `load_pdfs=False, load_csvs=True`
 - For mixed processing: `load_pdfs=True, load_csvs=True`
 
 **To configure golden test set size**:
@@ -598,22 +788,17 @@ The `run_rag_evaluation_pipeline.py` script provides:
 Before pushing feature branches, complete this validation sequence:
 
 ```bash
-# 1. Validate phase completion against .claude/tasks.yaml
-python scripts/validation/check_implementation_status.py
-
-# 2. Check branch-phase alignment
-python scripts/validation/validate_branch_phase.py
-
-# 3. Run comprehensive tests
+# 1. Run comprehensive tests
 python -m pytest tests/unit/ -v
 python validation/postgres_data_analysis.py
 python validation/retrieval_strategy_comparison.py
 
-# 4. Verify no scope creep
-python scripts/validation/detect_scope_creep.py
+# 2. Ensure all dependencies are satisfied
+uv sync && python -c "import langchain, openai, cohere, ragas; print('✅ Core dependencies verified')"
 
-# 5. Ensure all dependencies are satisfied
-uv sync && python -c "import all_required_modules"
+# 3. Run linting and formatting checks
+ruff check src/ validation/ --fix
+ruff format src/ validation/
 ```
 
 #### Push Commands
@@ -646,11 +831,11 @@ gh pr create --title "Phase X: [Implementation Summary]" --body "## Implementati
 5. **Dependencies**: New packages or configuration requirements
 
 **Review Criteria:**
-- [ ] Phase requirements from `.claude/tasks.yaml` are met
-- [ ] All tests passing and validation scripts successful
-- [ ] No scope creep into other phases
+- [ ] All tests passing and validation successful
 - [ ] Proper error handling and logging
 - [ ] Documentation updated for new features
+- [ ] Code quality checks pass (ruff lint and format)
+- [ ] No security issues or hardcoded secrets
 
 ### External Documentation
 
