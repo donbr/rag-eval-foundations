@@ -100,10 +100,6 @@ class Config:
                 ),
             ]
 
-    @property
-    def async_url(self) -> str:
-        return f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
-
 
 def setup_environment() -> Config:
     """Setup environment and return configuration"""
