@@ -5,12 +5,16 @@ Tests the statistical and semantic validation functionality according to
 Phase 3 requirements from .claude/tasks.yaml.
 """
 
-import asyncio
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
 
 from src.golden_testset.manager import GoldenExample, GoldenTestset
-from src.golden_testset.quality_validator import QualityValidator, QualityMetrics, ValidationResult
+from src.golden_testset.quality_validator import (
+    QualityMetrics,
+    QualityValidator,
+    ValidationResult,
+)
 
 
 class TestQualityValidator:
@@ -27,34 +31,69 @@ class TestQualityValidator:
         return [
             GoldenExample(
                 question="What factors influence user trust in AI systems?",
-                ground_truth="User trust in AI systems is influenced by transparency, accuracy, consistency, and explainability of the AI's decisions.",
-                contexts=["Trust research shows multiple factors affect user confidence in AI systems."],
-                ragas_difficulty=2.0
+                ground_truth=(
+                    "User trust in AI systems is influenced by "
+                    "transparency, accuracy, consistency, and "
+                    "explainability of the AI's decisions."
+                ),
+                contexts=[
+                    "Trust research shows multiple factors affect "
+                    "user confidence in AI systems."
+                ],
+                ragas_difficulty=2.0,
             ),
             GoldenExample(
                 question="How do people adapt their interaction patterns with LLMs?",
-                ground_truth="People adapt by learning effective prompting strategies, adjusting their expectations, and developing verification habits.",
-                contexts=["Human-AI interaction patterns evolve through experience and learning."],
-                ragas_difficulty=2.5
+                ground_truth=(
+                    "People adapt by learning effective prompting strategies, "
+                    "adjusting their expectations, and developing "
+                    "verification habits."
+                ),
+                contexts=[
+                    "Human-AI interaction patterns evolve through "
+                    "experience and learning."
+                ],
+                ragas_difficulty=2.5,
             ),
             GoldenExample(
                 question="What are the key challenges in human-AI collaboration?",
-                ground_truth="Key challenges include calibrating trust, managing overreliance, handling errors gracefully, and maintaining human agency.",
-                contexts=["Collaboration between humans and AI faces several documented challenges."],
-                ragas_difficulty=3.0
+                ground_truth=(
+                    "Key challenges include calibrating trust, managing "
+                    "overreliance, handling errors gracefully, and "
+                    "maintaining human agency."
+                ),
+                contexts=[
+                    "Collaboration between humans and AI faces several "
+                    "documented challenges."
+                ],
+                ragas_difficulty=3.0,
             ),
             GoldenExample(
                 question="Why do users sometimes reject correct AI advice?",
-                ground_truth="Users may reject correct AI advice due to algorithmic aversion, past negative experiences, or lack of understanding of AI capabilities.",
-                contexts=["Algorithmic aversion describes user tendency to avoid AI recommendations."],
-                ragas_difficulty=2.2
+                ground_truth=(
+                    "Users may reject correct AI advice due to algorithmic "
+                    "aversion, past negative experiences, or lack of "
+                    "understanding of AI capabilities."
+                ),
+                contexts=[
+                    "Algorithmic aversion describes user tendency to avoid "
+                    "AI recommendations."
+                ],
+                ragas_difficulty=2.2,
             ),
             GoldenExample(
                 question="How can AI systems better communicate uncertainty?",
-                ground_truth="AI systems can communicate uncertainty through confidence scores, uncertainty intervals, alternative suggestions, and clear limitation statements.",
-                contexts=["Uncertainty communication is crucial for appropriate reliance on AI systems."],
-                ragas_difficulty=2.8
-            )
+                ground_truth=(
+                    "AI systems can communicate uncertainty through confidence "
+                    "scores, uncertainty intervals, alternative suggestions, "
+                    "and clear limitation statements."
+                ),
+                contexts=[
+                    "Uncertainty communication is crucial for appropriate "
+                    "reliance on AI systems."
+                ],
+                ragas_difficulty=2.8,
+            ),
         ]
 
     @pytest.fixture
@@ -63,22 +102,31 @@ class TestQualityValidator:
         return [
             GoldenExample(
                 question="What is machine learning?",
-                ground_truth="Machine learning is a subset of AI that enables computers to learn without explicit programming.",
+                ground_truth=(
+                    "Machine learning is a subset of AI that enables "
+                    "computers to learn without explicit programming."
+                ),
                 contexts=["ML definition"],
-                ragas_difficulty=1.0
+                ragas_difficulty=1.0,
             ),
             GoldenExample(
                 question="What is machine learning?",  # Exact duplicate
-                ground_truth="Machine learning is a subset of AI that enables computers to learn without explicit programming.",
+                ground_truth=(
+                    "Machine learning is a subset of AI that enables "
+                    "computers to learn without explicit programming."
+                ),
                 contexts=["ML definition"],
-                ragas_difficulty=1.0
+                ragas_difficulty=1.0,
             ),
             GoldenExample(
                 question="Define machine learning",  # Semantic duplicate
-                ground_truth="Machine learning is an AI approach where systems learn from data.",
+                ground_truth=(
+                    "Machine learning is an AI approach where systems "
+                    "learn from data."
+                ),
                 contexts=["ML definition"],
-                ragas_difficulty=1.0
-            )
+                ragas_difficulty=1.0,
+            ),
         ]
 
     @pytest.fixture
@@ -92,13 +140,15 @@ class TestQualityValidator:
             version_major=1,
             version_minor=0,
             version_patch=0,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             domain="research",
-            status="active"
+            status="active",
         )
 
     @pytest.mark.asyncio
-    async def test_validate_diverse_testset_passes(self, validator, sample_testset):
+    async def test_validate_diverse_testset_passes(
+        self, validator, sample_testset
+    ):
         """Test that diverse testset passes quality validation"""
         result = await validator.validate_testset(sample_testset)
 
@@ -116,7 +166,9 @@ class TestQualityValidator:
         assert result.metrics.distribution_p_value > 0.0
 
     @pytest.mark.asyncio
-    async def test_validate_duplicate_testset_fails(self, validator, duplicate_examples):
+    async def test_validate_duplicate_testset_fails(
+        self, validator, duplicate_examples
+    ):
         """Test that testset with duplicates fails validation"""
         testset = GoldenTestset(
             id="test-dup",
@@ -126,9 +178,9 @@ class TestQualityValidator:
             version_major=1,
             version_minor=0,
             version_patch=0,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             domain="test",
-            status="draft"
+            status="draft",
         )
 
         result = await validator.validate_testset(testset)
@@ -162,7 +214,7 @@ class TestQualityValidator:
             "What is machine learning?",
             "What is deep learning?",
             "What is machine learning?",  # Exact duplicate
-            "What is neural networks?"
+            "What is neural networks?",
         ]
 
         duplicate_count = await validator._count_duplicates(questions)
@@ -174,7 +226,7 @@ class TestQualityValidator:
         questions = [
             "What is machine learning?",
             "Define machine learning",  # Semantic duplicate
-            "What is deep learning?"
+            "What is deep learning?",
         ]
 
         duplicate_count = await validator._count_duplicates(questions)
@@ -196,7 +248,9 @@ class TestQualityValidator:
         questions = [ex.question for ex in diverse_examples]
         ground_truths = [ex.ground_truth for ex in diverse_examples]
 
-        coherence = await validator._calculate_semantic_coherence(questions, ground_truths)
+        coherence = await validator._calculate_semantic_coherence(
+            questions, ground_truths
+        )
 
         assert 0.0 <= coherence <= 1.0
         # Questions and answers should be reasonably coherent
@@ -215,14 +269,16 @@ class TestQualityValidator:
         # Create metrics with some issues
         metrics = QualityMetrics(
             diversity_score=0.5,  # Below threshold
-            duplicate_count=2,    # Has duplicates
-            coverage_score=0.8,   # Below threshold
+            duplicate_count=2,  # Has duplicates
+            coverage_score=0.8,  # Below threshold
             semantic_coherence=0.4,
             distribution_p_value=0.8,
-            validation_timestamp=datetime.now(timezone.utc)
+            validation_timestamp=datetime.now(UTC),
         )
 
-        recommendations = await validator._generate_recommendations(metrics, diverse_examples)
+        recommendations = await validator._generate_recommendations(
+            metrics, diverse_examples
+        )
 
         assert len(recommendations) > 0
         assert any("diversity" in rec.lower() for rec in recommendations)
@@ -239,7 +295,7 @@ class TestQualityValidator:
             coverage_score=0.95,
             semantic_coherence=0.7,
             distribution_p_value=0.1,
-            validation_timestamp=datetime.now(timezone.utc)
+            validation_timestamp=datetime.now(UTC),
         )
 
         assert good_metrics.passes_quality_gates() is True
@@ -248,11 +304,11 @@ class TestQualityValidator:
         # Failing metrics
         bad_metrics = QualityMetrics(
             diversity_score=0.5,  # Too low
-            duplicate_count=3,    # Has duplicates
-            coverage_score=0.7,   # Too low
+            duplicate_count=3,  # Has duplicates
+            coverage_score=0.7,  # Too low
             semantic_coherence=0.6,
             distribution_p_value=0.01,  # Too low
-            validation_timestamp=datetime.now(timezone.utc)
+            validation_timestamp=datetime.now(UTC),
         )
 
         assert bad_metrics.passes_quality_gates() is False
@@ -282,7 +338,10 @@ class TestQualityValidator:
         result = await validator.validate_testset(sample_testset)
 
         # Performance requirement from tasks.yaml: <100ms
-        assert result.validation_duration_ms < 100, f"Validation took {result.validation_duration_ms}ms, should be <100ms"
+        assert result.validation_duration_ms < 100, (
+            f"Validation took {result.validation_duration_ms}ms, "
+            "should be <100ms"
+        )
 
     @pytest.mark.asyncio
     async def test_empty_testset(self, validator):
@@ -295,9 +354,9 @@ class TestQualityValidator:
             version_major=1,
             version_minor=0,
             version_patch=0,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             domain="test",
-            status="draft"
+            status="draft",
         )
 
         result = await validator.validate_testset(empty_testset)
@@ -315,16 +374,19 @@ class TestQualityValidator:
             examples=[
                 GoldenExample(
                     question="What is AI?",
-                    ground_truth="Artificial Intelligence is the simulation of human intelligence in machines.",
-                    contexts=["AI definition"]
+                    ground_truth=(
+                        "Artificial Intelligence is the simulation of "
+                        "human intelligence in machines."
+                    ),
+                    contexts=["AI definition"],
                 )
             ],
             version_major=1,
             version_minor=0,
             version_patch=0,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             domain="test",
-            status="draft"
+            status="draft",
         )
 
         result = await validator.validate_testset(single_testset)
@@ -339,7 +401,7 @@ class TestQualityValidator:
         custom_validator = QualityValidator(
             min_diversity_score=0.8,  # Higher than default
             min_coverage_score=0.95,  # Higher than default
-            semantic_similarity_threshold=0.9  # Higher than default
+            semantic_similarity_threshold=0.9,  # Higher than default
         )
 
         assert custom_validator.min_diversity_score == 0.8

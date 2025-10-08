@@ -18,25 +18,30 @@ Test Requirements:
 - Performance benchmarking for critical operations
 """
 
-import pytest
 import asyncio
-import sys
-import os
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone
-from typing import Dict, List, Any
 import json
+import os
+import sys
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
-from golden_testset.manager import (
-    GoldenTestsetManager, GoldenTestset, GoldenExample,
-    ChangeType, TestsetStatus, ValidationStatus,
-    create_testset_from_dict, export_testset_to_dict
-)
-from golden_testset.versioning import SemanticVersion, VersionBump
 from golden_testset.change_detector import ChangeDetectionResult, ChangeRecord
+from golden_testset.manager import (
+    ChangeType,
+    GoldenExample,
+    GoldenTestset,
+    GoldenTestsetManager,
+    TestsetStatus,
+    ValidationStatus,
+    create_testset_from_dict,
+    export_testset_to_dict,
+)
+from golden_testset.versioning import VersionBump
 
 # Test fixtures and sample data
 
@@ -46,24 +51,33 @@ def sample_examples():
     return [
         GoldenExample(
             question="What is the Federal Pell Grant eligibility requirement?",
-            ground_truth="Students must demonstrate exceptional financial need and be enrolled in an eligible undergraduate program",
+            ground_truth=(
+                "Students must demonstrate exceptional financial need "
+                "and be enrolled in an eligible undergraduate program"
+            ),
             contexts=["Federal Pell Grants are need-based financial aid."],
             ragas_question_type="simple",
-            ragas_difficulty=2.0
+            ragas_difficulty=2.0,
         ),
         GoldenExample(
             question="How long is the Direct Loan repayment period?",
-            ground_truth="Standard repayment is 10 years, but extended and income-driven plans are available",
+            ground_truth=(
+                "Standard repayment is 10 years, but extended "
+                "and income-driven plans are available"
+            ),
             contexts=["Direct Loans have various repayment options."],
             ragas_question_type="simple",
-            ragas_difficulty=1.5
+            ragas_difficulty=1.5,
         ),
         GoldenExample(
             question="What documents are required for FAFSA verification?",
-            ground_truth="Tax returns, W-2 forms, bank statements, and investment records may be required",
+            ground_truth=(
+                "Tax returns, W-2 forms, bank statements, and "
+                "investment records may be required"
+            ),
             contexts=["FAFSA verification requires documentation."],
             ragas_question_type="complex",
-            ragas_difficulty=3.0
+            ragas_difficulty=3.0,
         )
     ]
 
@@ -82,8 +96,8 @@ def sample_testset(sample_examples):
         domain="financial_aid",
         examples=sample_examples,
         metadata={"created_by": "test_user", "source": "manual_curation"},
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc)
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC)
     )
 
 @pytest.fixture
@@ -104,10 +118,12 @@ class TestGoldenTestsetManagerCreation:
     @pytest.mark.asyncio
     async def test_manager_initialization_default(self):
         """Test manager initialization with default parameters"""
-        with patch('golden_testset.manager.DatabaseConnectionManager') as mock_db:
+        with patch('golden_testset.manager.DatabaseConnectionManager'):
             manager = GoldenTestsetManager()
 
-            assert manager.connection_string == "postgresql://langchain:langchain@localhost:6024/langchain"
+            assert manager.connection_string == (
+                "postgresql://langchain:langchain@localhost:6024/langchain"
+            )
             assert manager.db_manager is None
 
     @pytest.mark.asyncio
@@ -115,7 +131,7 @@ class TestGoldenTestsetManagerCreation:
         """Test manager initialization with custom parameters"""
         custom_url = "postgresql://user:pass@localhost:5432/testdb"
 
-        with patch('golden_testset.manager.DatabaseConnectionManager') as mock_db:
+        with patch('golden_testset.manager.DatabaseConnectionManager'):
             manager = GoldenTestsetManager(connection_string=custom_url)
 
             assert manager.connection_string == custom_url
@@ -124,9 +140,12 @@ class TestGoldenTestsetManagerCreation:
     @pytest.mark.asyncio
     async def test_async_context_manager(self, mock_db_manager):
         """Test async context manager functionality"""
-        mock_db, mock_conn = mock_db_manager
+        mock_db, _mock_conn = mock_db_manager
 
-        with patch('golden_testset.manager.DatabaseConnectionManager', return_value=mock_db):
+        with patch(
+            'golden_testset.manager.DatabaseConnectionManager',
+            return_value=mock_db,
+        ):
             async with GoldenTestsetManager() as manager:
                 assert manager is not None
                 assert manager.db_manager == mock_db
@@ -155,17 +174,20 @@ class TestTestsetCRUDOperations:
             'status': 'approved',
             'domain': 'test_domain',
             'metadata': '{"created_by": "test"}',
-            'created_at': datetime.now(timezone.utc),
-            'updated_at': datetime.now(timezone.utc)
+            'created_at': datetime.now(UTC),
+            'updated_at': datetime.now(UTC)
         }
 
-        with patch('golden_testset.manager.DatabaseConnectionManager', return_value=mock_db):
+        with patch(
+            'golden_testset.manager.DatabaseConnectionManager',
+            return_value=mock_db,
+        ):
             async with GoldenTestsetManager() as manager:
                 testset = await manager.create_testset(
                     name="test_testset",
                     description="Test description",
                     examples=sample_examples,
-                    domain="test_domain"
+                    domain="test_domain",
                 )
 
                 assert testset.name == "test_testset"
@@ -184,15 +206,19 @@ class TestTestsetCRUDOperations:
 
         # Mock duplicate key error
         from asyncpg.exceptions import UniqueViolationError
+
         mock_conn.fetchval.side_effect = UniqueViolationError("duplicate key")
 
-        with patch('golden_testset.manager.DatabaseConnectionManager', return_value=mock_db):
+        with patch(
+            'golden_testset.manager.DatabaseConnectionManager',
+            return_value=mock_db,
+        ):
             async with GoldenTestsetManager() as manager:
                 with pytest.raises(ValueError, match="Testset with name"):
                     await manager.create_testset(
                         name="duplicate_testset",
                         description="Test description",
-                        examples=sample_examples
+                        examples=sample_examples,
                     )
 
     @pytest.mark.asyncio
@@ -223,7 +249,7 @@ class TestTestsetCRUDOperations:
                 'question': ex.question,
                 'ground_truth': ex.ground_truth,
                 'metadata': json.dumps(ex.metadata or {}),
-                'created_at': datetime.now(timezone.utc)
+                'created_at': datetime.now(UTC),
             }
             for i, ex in enumerate(sample_testset.examples)
         ]
@@ -231,9 +257,14 @@ class TestTestsetCRUDOperations:
         mock_conn.fetchrow.return_value = testset_row
         mock_conn.fetch.return_value = example_rows
 
-        with patch('golden_testset.manager.DatabaseConnectionManager', return_value=mock_db):
+        with patch(
+            'golden_testset.manager.DatabaseConnectionManager',
+            return_value=mock_db,
+        ):
             async with GoldenTestsetManager() as manager:
-                result = await manager.get_testset_by_name("financial_aid_baseline")
+                result = await manager.get_testset_by_name(
+                    "financial_aid_baseline"
+                )
 
                 assert result is not None
                 assert result.name == sample_testset.name
@@ -247,9 +278,14 @@ class TestTestsetCRUDOperations:
 
         mock_conn.fetchrow.return_value = None
 
-        with patch('golden_testset.manager.DatabaseConnectionManager', return_value=mock_db):
+        with patch(
+            'golden_testset.manager.DatabaseConnectionManager',
+            return_value=mock_db,
+        ):
             async with GoldenTestsetManager() as manager:
-                result = await manager.get_testset_by_name("nonexistent_testset")
+                result = await manager.get_testset_by_name(
+                    "nonexistent_testset"
+                )
 
                 assert result is None
 
@@ -261,7 +297,10 @@ class TestTestsetCRUDOperations:
         # Mock successful update
         mock_conn.execute.return_value = "UPDATE 1"
 
-        with patch('golden_testset.manager.DatabaseConnectionManager', return_value=mock_db):
+        with patch(
+            'golden_testset.manager.DatabaseConnectionManager',
+            return_value=mock_db,
+        ):
             async with GoldenTestsetManager() as manager:
                 updated_testset = sample_testset
                 updated_testset.description = "Updated description"
@@ -278,7 +317,10 @@ class TestTestsetCRUDOperations:
 
         mock_conn.execute.return_value = "DELETE 1"
 
-        with patch('golden_testset.manager.DatabaseConnectionManager', return_value=mock_db):
+        with patch(
+            'golden_testset.manager.DatabaseConnectionManager',
+            return_value=mock_db,
+        ):
             async with GoldenTestsetManager() as manager:
                 success = await manager.delete_testset("test_testset")
 
@@ -302,8 +344,8 @@ class TestTestsetCRUDOperations:
                 'status': 'approved',
                 'domain': 'test',
                 'metadata': '{}',
-                'created_at': datetime.now(timezone.utc),
-                'updated_at': datetime.now(timezone.utc)
+                'created_at': datetime.now(UTC),
+                'updated_at': datetime.now(UTC)
             },
             {
                 'id': 'test-2',
@@ -316,14 +358,17 @@ class TestTestsetCRUDOperations:
                 'status': 'draft',
                 'domain': 'test',
                 'metadata': '{}',
-                'created_at': datetime.now(timezone.utc),
-                'updated_at': datetime.now(timezone.utc)
+                'created_at': datetime.now(UTC),
+                'updated_at': datetime.now(UTC)
             }
         ]
 
         mock_conn.fetch.return_value = mock_testsets
 
-        with patch('golden_testset.manager.DatabaseConnectionManager', return_value=mock_db):
+        with patch(
+            'golden_testset.manager.DatabaseConnectionManager',
+            return_value=mock_db,
+        ):
             async with GoldenTestsetManager() as manager:
                 testsets = await manager.list_testsets()
 
@@ -357,14 +402,17 @@ class TestVersionManagement:
                 'status': 'draft',
                 'domain': sample_testset.domain,
                 'metadata': json.dumps(sample_testset.metadata),
-                'created_at': datetime.now(timezone.utc),
-                'updated_at': datetime.now(timezone.utc)
+                'created_at': datetime.now(UTC),
+                'updated_at': datetime.now(UTC)
             }
         ]
         mock_conn.fetchval.return_value = 'new-uuid'
         mock_conn.fetch.return_value = []  # No examples for simplicity
 
-        with patch('golden_testset.manager.DatabaseConnectionManager', return_value=mock_db):
+        with patch(
+            'golden_testset.manager.DatabaseConnectionManager',
+            return_value=mock_db,
+        ):
             async with GoldenTestsetManager() as manager:
                 new_version = await manager.create_new_version(
                     sample_testset.name,
@@ -387,7 +435,10 @@ class TestVersionManagement:
             'version_patch': 3
         }
 
-        with patch('golden_testset.manager.DatabaseConnectionManager', return_value=mock_db):
+        with patch(
+            'golden_testset.manager.DatabaseConnectionManager',
+            return_value=mock_db,
+        ):
             async with GoldenTestsetManager() as manager:
                 version = await manager.get_latest_version("test_testset")
 
@@ -401,14 +452,32 @@ class TestVersionManagement:
         mock_db, mock_conn = mock_db_manager
 
         version_history = [
-            {'version_major': 1, 'version_minor': 0, 'version_patch': 0, 'created_at': datetime.now(timezone.utc)},
-            {'version_major': 1, 'version_minor': 1, 'version_patch': 0, 'created_at': datetime.now(timezone.utc)},
-            {'version_major': 2, 'version_minor': 0, 'version_patch': 0, 'created_at': datetime.now(timezone.utc)}
+            {
+                'version_major': 1,
+                'version_minor': 0,
+                'version_patch': 0,
+                'created_at': datetime.now(UTC),
+            },
+            {
+                'version_major': 1,
+                'version_minor': 1,
+                'version_patch': 0,
+                'created_at': datetime.now(UTC),
+            },
+            {
+                'version_major': 2,
+                'version_minor': 0,
+                'version_patch': 0,
+                'created_at': datetime.now(UTC),
+            },
         ]
 
         mock_conn.fetch.return_value = version_history
 
-        with patch('golden_testset.manager.DatabaseConnectionManager', return_value=mock_db):
+        with patch(
+            'golden_testset.manager.DatabaseConnectionManager',
+            return_value=mock_db,
+        ):
             async with GoldenTestsetManager() as manager:
                 history = await manager.get_version_history("test_testset")
 
@@ -435,7 +504,10 @@ class TestQualityMetrics:
             'diversity': 0.75
         }
 
-        with patch('golden_testset.manager.DatabaseConnectionManager', return_value=mock_db):
+        with patch(
+            'golden_testset.manager.DatabaseConnectionManager',
+            return_value=mock_db,
+        ):
             async with GoldenTestsetManager() as manager:
                 await manager.update_quality_metrics(
                     testset_id="test-uuid",
@@ -459,12 +531,15 @@ class TestQualityMetrics:
             'coverage': 0.90,
             'diversity': 0.75,
             'validation_status': 'passed',
-            'updated_at': datetime.now(timezone.utc)
+            'updated_at': datetime.now(UTC)
         }
 
         mock_conn.fetchrow.return_value = mock_metrics
 
-        with patch('golden_testset.manager.DatabaseConnectionManager', return_value=mock_db):
+        with patch(
+            'golden_testset.manager.DatabaseConnectionManager',
+            return_value=mock_db,
+        ):
             async with GoldenTestsetManager() as manager:
                 metrics = await manager.get_quality_metrics("test-uuid")
 
@@ -480,8 +555,13 @@ class TestChangeDetectionIntegration:
         """Test change detection for testset updates"""
         mock_db, mock_conn = mock_db_manager
 
-        with patch('golden_testset.manager.DatabaseConnectionManager', return_value=mock_db):
-            with patch('golden_testset.manager.detect_testset_changes') as mock_detect:
+        with patch(
+            'golden_testset.manager.DatabaseConnectionManager',
+            return_value=mock_db,
+        ):
+            with patch(
+                'golden_testset.manager.detect_testset_changes'
+            ) as mock_detect:
                 # Mock change detection result
                 mock_changes = [
                     ChangeRecord(
@@ -533,12 +613,15 @@ class TestErrorHandling:
 
         mock_conn.fetchrow.return_value = None  # No current version
 
-        with patch('golden_testset.manager.DatabaseConnectionManager', return_value=mock_db):
+        with patch(
+            'golden_testset.manager.DatabaseConnectionManager',
+            return_value=mock_db,
+        ):
             async with GoldenTestsetManager() as manager:
                 with pytest.raises(ValueError, match="Testset not found"):
                     await manager.create_new_version(
                         "nonexistent_testset",
-                        VersionBump.MINOR
+                        VersionBump.MINOR,
                     )
 
     @pytest.mark.asyncio
@@ -546,13 +629,16 @@ class TestErrorHandling:
         """Test creation with invalid testset data"""
         mock_db, mock_conn = mock_db_manager
 
-        with patch('golden_testset.manager.DatabaseConnectionManager', return_value=mock_db):
+        with patch(
+            'golden_testset.manager.DatabaseConnectionManager',
+            return_value=mock_db,
+        ):
             async with GoldenTestsetManager() as manager:
                 with pytest.raises(ValueError, match="Examples list cannot be empty"):
                     await manager.create_testset(
                         name="invalid_testset",
                         description="Test",
-                        examples=[]  # Empty examples
+                        examples=[],  # Empty examples
                     )
 
 class TestUtilityFunctions:
@@ -575,8 +661,8 @@ class TestUtilityFunctions:
                 }
             ],
             'metadata': {'created_by': 'test'},
-            'created_at': datetime.now(timezone.utc).isoformat(),
-            'updated_at': datetime.now(timezone.utc).isoformat()
+            'created_at': datetime.now(UTC).isoformat(),
+            'updated_at': datetime.now(UTC).isoformat()
         }
 
         testset = create_testset_from_dict(testset_dict)
@@ -607,7 +693,10 @@ class TestPerformance:
         # Mock fast database responses
         mock_conn.executemany.return_value = None
 
-        with patch('golden_testset.manager.DatabaseConnectionManager', return_value=mock_db):
+        with patch(
+            'golden_testset.manager.DatabaseConnectionManager',
+            return_value=mock_db,
+        ):
             async with GoldenTestsetManager() as manager:
                 # Test bulk example insertion
                 examples = [
@@ -628,6 +717,7 @@ class TestPerformance:
 
                 # Should complete bulk operations in under 500ms
                 assert elapsed < 500.0
+
 
 if __name__ == "__main__":
     # Run tests with pytest
