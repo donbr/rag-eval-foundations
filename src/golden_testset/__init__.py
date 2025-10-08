@@ -29,7 +29,7 @@ from .manager import (
     export_testset_to_dict
 )
 
-# Phase 3: Quality Validation Pipeline
+# Phase 3: Quality Validation (preserved - has test coverage)
 from .quality_validator import (
     QualityValidator,
     QualityMetrics,
@@ -38,14 +38,9 @@ from .quality_validator import (
     check_quality_gates
 )
 
-from .validation_pipeline import (
-    ValidationPipeline,
-    ValidationStage,
-    StrictnessLevel,
-    PipelineResult,
-    validate_with_pipeline,
-    check_activation_readiness
-)
+# Note: validation_pipeline archived (no usage in main pipeline)
+# Note: cost_tracker, tracing, transactions, hybrid_cost_manager archived
+# See docs/archived_modules/README.md for details
 
 __version__ = "1.0.0"
 __all__ = [
@@ -59,16 +54,10 @@ __all__ = [
     "create_testset_from_dict",
     "export_testset_to_dict",
 
-    # Phase 3: Quality Validation
+    # Phase 3: Quality Validation (has test coverage)
     "QualityValidator",
     "QualityMetrics",
     "ValidationResult",
     "validate_testset_quality",
     "check_quality_gates",
-    "ValidationPipeline",
-    "ValidationStage",
-    "StrictnessLevel",
-    "PipelineResult",
-    "validate_with_pipeline",
-    "check_activation_readiness"
 ]
