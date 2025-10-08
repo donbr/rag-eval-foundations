@@ -19,6 +19,18 @@ from langchain.retrievers import EnsembleRetriever
 from phoenix.experiments.evaluators import create_evaluator
 from phoenix.evals import QAEvaluator, OpenAIModel, RelevanceEvaluator
 
+# Import shared configuration
+from config import (
+    PHOENIX_ENDPOINT,
+    GOLDEN_TESTSET_NAME,
+    LLM_MODEL,
+    EMBEDDING_MODEL,
+    COHERE_RERANK_MODEL,
+    get_postgres_async_url,
+    BASELINE_TABLE,
+    SEMANTIC_TABLE,
+)
+
 # QA Correctness Evaluator (from Phoenix official docs)
 @create_evaluator(name="qa_correctness_score")
 def qa_correctness_evaluator(output, reference, input):
@@ -116,20 +128,52 @@ async def main():
     os.environ["PHOENIX_COLLECTOR_ENDPOINT"] = os.getenv("PHOENIX_COLLECTOR_ENDPOINT")
 
     # Connect to Phoenix and get the dataset
-    px_client = px.Client()
-    dataset = px_client.get_dataset(name="mixed_golden_testset")
-    
-    print(f"📊 Dataset loaded: {dataset}")
+    print(f"🔗 Connecting to Phoenix at: {PHOENIX_ENDPOINT}")
+    px_client = px.Client(endpoint=PHOENIX_ENDPOINT)
+
+    # Query for the golden testset dataset (handle versioned naming)
+    print(f"🔍 Looking for dataset: {GOLDEN_TESTSET_NAME}")
+
+    # Use HTTP API to list all datasets (Phoenix SDK doesn't have list_datasets)
+    import requests
+    datasets_response = requests.get(f"{PHOENIX_ENDPOINT}/v1/datasets")
+    datasets_response.raise_for_status()
+    datasets_data = datasets_response.json()["data"]
+
+    print(f"📋 Found {len(datasets_data)} total datasets")
+
+    # Search for matching dataset
+    matching_datasets = [
+        d for d in datasets_data
+        if "golden_testset" in d["name"].lower()
+    ]
+
+    if not matching_datasets:
+        available_names = [d["name"] for d in datasets_data]
+        raise ValueError(
+            f"No golden testset dataset found. Available datasets: {available_names}"
+        )
+
+    # Use the most recent one
+    dataset_info = matching_datasets[-1]
+    dataset_name = dataset_info["name"]
+    print(f"✅ Using dataset: {dataset_name}")
+
+    # Get the dataset using Phoenix SDK
+    dataset = px_client.get_dataset(name=dataset_name)
+
+    print(f"📊 Dataset loaded: {dataset_name}")
+    print(f"📊 Dataset ID: {dataset.id}")
     print(f"📊 Total examples: {len(list(dataset.examples))}")
 
     llm = ChatOpenAI(
-        model="gpt-4.1-mini",
+        model=LLM_MODEL,
         temperature=0,
         max_tokens=None,
         timeout=None,
         max_retries=2
     )
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+    embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
 
     RAG_TEMPLATE = """\
 You are a helpful and kind assistant. Use the context provided below to answer the question.
@@ -144,33 +188,23 @@ Context:
 """
     rag_prompt = ChatPromptTemplate.from_template(RAG_TEMPLATE)
 
-    POSTGRES_USER     = "langchain"
-    POSTGRES_PASSWORD = "langchain"
-    POSTGRES_HOST     = "localhost"
-    POSTGRES_PORT     = "6024"
-    POSTGRES_DB       = "langchain"
-    TABLE_BASELINE    = "mixed_baseline_documents"
-    TABLE_SEMANTIC    = "mixed_semantic_documents"
-
-    async_url = (
-        f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}"
-        f"@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-    )
+    # Use shared configuration
+    async_url = get_postgres_async_url()
     pg_engine = PGEngine.from_connection_string(url=async_url)
 
     baseline_vectorstore = await PGVectorStore.create(
         engine=pg_engine,
-        table_name=TABLE_BASELINE,
+        table_name=BASELINE_TABLE,
         embedding_service=embeddings,
     )
     semantic_vectorstore = await PGVectorStore.create(
         engine=pg_engine,
-        table_name=TABLE_SEMANTIC,
+        table_name=SEMANTIC_TABLE,
         embedding_service=embeddings,
     )
 
     naive_retriever = baseline_vectorstore.as_retriever(search_kwargs={"k": 10})
-    cohere_rerank = CohereRerank(model="rerank-english-v3.0")
+    cohere_rerank = CohereRerank(model=COHERE_RERANK_MODEL)
     compression_retriever = ContextualCompressionRetriever(
         base_compressor=cohere_rerank,
         base_retriever=naive_retriever
@@ -204,31 +238,6 @@ Context:
 
     for strategy_name, chain in chains.items():
         print(f"\n🧪 Running experiment for strategy: {strategy_name}")
-        
-        def create_task_function(strategy_chain, strategy):
-            """Factory function to create task function for each strategy"""
-            def task(example: Example) -> str:
-                """
-                CORRECT task function signature - takes Example object, returns string
-                """
-                try:
-                    # map question to input key from dataset
-                    question = example.input["input"]
-                    
-                    # Invoke the chain for this strategy
-                    result = strategy_chain.invoke({"question": question})
-                    
-                    # Return the response content
-                    return result["response"].content
-                    
-                except Exception as e:
-                    print(f"❌ Error in {strategy} task: {e}")
-                    return f"Error in {strategy}: {str(e)}"
-            
-            return task
-
-        # Create task function for this strategy
-        create_task_function(chain, strategy_name)
 
         # Run the experiment
         experiment_name = f"{strategy_name}_rag_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}"

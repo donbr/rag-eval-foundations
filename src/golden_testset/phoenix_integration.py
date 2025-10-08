@@ -15,8 +15,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from decimal import Decimal
+import io
 
 import aiohttp
+import pandas as pd
+import phoenix as px
 from opentelemetry import trace as otel_trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
@@ -71,9 +74,23 @@ class PhoenixIntegration:
         self.manager = manager
         self.config = config or PhoenixConfig()
         self.tracer = None
+        self.phoenix_client = None
 
         if self.config.enable_tracing:
             self._setup_tracing()
+
+        # Initialize Phoenix client for dataset uploads
+        self._init_phoenix_client()
+
+    def _init_phoenix_client(self):
+        """Initialize Phoenix client for dataset operations."""
+        try:
+            # Initialize Phoenix client with endpoint
+            self.phoenix_client = px.Client(endpoint=self.config.endpoint)
+            logger.info(f"Phoenix client initialized: {self.config.endpoint}")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Phoenix client: {e}. Will use HTTP fallback.")
+            self.phoenix_client = None
 
     def _setup_tracing(self):
         """Setup OpenTelemetry tracing for Phoenix."""
@@ -171,6 +188,169 @@ class PhoenixIntegration:
             if span:
                 span.end()
 
+    async def upload_external_testset(
+        self, testset_data: dict[str, Any], dataset_name: str = "external_testset"
+    ) -> dict[str, Any]:
+        """Upload external testset data (e.g., from RAGAS) to Phoenix.
+
+        Args:
+            testset_data: External testset data with examples and metadata
+            dataset_name: Name for the Phoenix dataset
+
+        Returns:
+            Upload result with dataset ID and metrics
+        """
+        span = None
+        if self.tracer:
+            span = self.tracer.start_span("upload_external_testset")
+
+        try:
+            # Generate version for external data
+            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            version_str = f"external_{timestamp}"
+
+            # Prepare dataset for Phoenix
+            dataset = self._prepare_external_phoenix_dataset(testset_data)
+
+            if not dataset:
+                raise ValueError("No valid examples found in testset data")
+
+            # Upload to Phoenix
+            result = await self._upload_to_phoenix(dataset, version_str)
+
+            # Store minimal metadata for tracking
+            await self._update_external_upload_metadata(
+                dataset_name, version_str, result, testset_data
+            )
+
+            logger.info(
+                f"Successfully uploaded external testset {dataset_name} "
+                f"version {version_str} with {len(dataset)} examples"
+            )
+
+            return {
+                "dataset_name": dataset_name,
+                "version": version_str,
+                "dataset_id": result["dataset_id"],
+                "created_at": result["upload_timestamp"],
+                "num_examples": len(dataset),
+                "phoenix_url": result.get("dataset_url", ""),
+                "status": "success"
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to upload external testset: {e}")
+            raise
+
+        finally:
+            if span:
+                span.end()
+
+    def _validate_dataset(self, dataset: list[dict[str, Any]]) -> tuple[bool, str]:
+        """Validate dataset before upload.
+
+        Args:
+            dataset: List of examples to validate
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if not dataset:
+            return False, "Dataset is empty"
+
+        if not isinstance(dataset, list):
+            return False, "Dataset must be a list of examples"
+
+        required_fields = {"input", "reference"}
+        for i, example in enumerate(dataset):
+            if not isinstance(example, dict):
+                return False, f"Example {i} is not a dictionary"
+
+            # Check for either old format (question/ground_truth) or new format (input/reference)
+            has_old_format = "question" in example or "ground_truth" in example
+            has_new_format = "input" in example or "reference" in example
+
+            if not (has_old_format or has_new_format):
+                return False, f"Example {i} missing required fields (input/reference or question/ground_truth)"
+
+            # Validate non-empty values
+            input_val = example.get("input") or example.get("question")
+            ref_val = example.get("reference") or example.get("ground_truth")
+
+            if not input_val or not str(input_val).strip():
+                return False, f"Example {i} has empty input/question"
+
+            if not ref_val or not str(ref_val).strip():
+                return False, f"Example {i} has empty reference/ground_truth"
+
+        logger.info(f"✅ Dataset validation passed: {len(dataset)} examples")
+        return True, ""
+
+    def _prepare_external_phoenix_dataset(self, testset_data: dict[str, Any]) -> list[dict[str, Any]]:
+        """Prepare external testset data for Phoenix upload.
+
+        Args:
+            testset_data: External testset data with examples and metadata
+
+        Returns:
+            List of Phoenix-compatible examples
+        """
+        examples = []
+
+        # Handle different input formats
+        raw_examples = testset_data.get("examples", [])
+        if not raw_examples:
+            # Fallback for direct list format
+            raw_examples = testset_data if isinstance(testset_data, list) else []
+
+        for example in raw_examples:
+            # Ensure required fields exist
+            if not isinstance(example, dict):
+                continue
+
+            phoenix_example = {
+                "input": example.get("question", example.get("input", "")),
+                "reference": example.get("ground_truth", example.get("reference", "")),
+                "contexts": example.get("contexts", []),
+                "metadata": {
+                    "source": "external_upload",
+                    "synthesizer_name": example.get("metadata", {}).get("synthesizer_name", "unknown"),
+                    "evolution_type": example.get("metadata", {}).get("evolution_type", "simple"),
+                    "generated_at": example.get("metadata", {}).get("generated_at", datetime.utcnow().isoformat()),
+                    **testset_data.get("metadata", {})
+                },
+            }
+
+            # Validate required fields
+            if phoenix_example["input"] and phoenix_example["reference"]:
+                examples.append(phoenix_example)
+
+        return examples
+
+    async def _update_external_upload_metadata(
+        self, dataset_name: str, version: str, upload_result: dict, testset_data: dict
+    ) -> None:
+        """Store metadata for external upload tracking.
+
+        Args:
+            dataset_name: Name of the dataset
+            version: Version string
+            upload_result: Result from Phoenix upload
+            testset_data: Original testset data
+        """
+        # This could store minimal tracking info in a separate table
+        # For now, just log the upload
+        metadata = {
+            "dataset_name": dataset_name,
+            "version": version,
+            "upload_timestamp": upload_result.get("upload_timestamp"),
+            "dataset_id": upload_result.get("dataset_id"),
+            "num_examples": len(testset_data.get("examples", [])),
+            "source": testset_data.get("metadata", {}).get("source", "unknown"),
+        }
+
+        logger.info(f"External upload metadata: {metadata}")
+
     def _prepare_phoenix_dataset(self, testset: dict[str, Any]) -> list[dict[str, Any]]:
         """Prepare testset data for Phoenix upload.
 
@@ -219,10 +399,68 @@ class PhoenixIntegration:
 
         return examples
 
+    async def _upload_to_phoenix_sdk(
+        self, dataset: list[dict[str, Any]], dataset_name: str, version: str
+    ) -> dict[str, Any]:
+        """Upload dataset to Phoenix using SDK.
+
+        Args:
+            dataset: Prepared dataset examples
+            dataset_name: Name for the dataset
+            version: Version string
+
+        Returns:
+            Upload result with dataset ID and URL
+        """
+        if not self.phoenix_client:
+            raise ValueError("Phoenix client not initialized. Check endpoint configuration.")
+
+        upload_timestamp = datetime.utcnow().isoformat()
+
+        logger.info(f"📤 Preparing dataset for Phoenix SDK upload...")
+
+        # Convert to pandas DataFrame (Phoenix SDK expects this format)
+        df_data = []
+        for example in dataset:
+            df_data.append({
+                "input": example.get("input", ""),
+                "reference": example.get("reference", ""),
+                "metadata": json.dumps(example.get("metadata", {})),
+            })
+
+        df = pd.DataFrame(df_data)
+        logger.info(f"📊 Created DataFrame with {len(df)} rows")
+
+        # Upload using Phoenix SDK
+        try:
+            logger.info(f"🚀 Uploading to Phoenix via SDK...")
+            result = self.phoenix_client.upload_dataset(
+                dataset_name=dataset_name,
+                dataframe=df,
+                input_keys=["input"],
+                output_keys=["reference"],
+            )
+
+            dataset_id = result.id if hasattr(result, 'id') else str(result)
+            logger.info(f"✅ Upload successful! Dataset ID: {dataset_id}")
+
+            return {
+                "dataset_id": dataset_id,
+                "dataset_name": dataset_name,
+                "version": version,
+                "example_count": len(dataset),
+                "upload_timestamp": upload_timestamp,
+                "phoenix_url": f"{self.config.endpoint}/datasets/{dataset_id}",
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Phoenix SDK upload failed: {e}")
+            raise
+
     async def _upload_to_phoenix(
         self, dataset: list[dict[str, Any]], version: str
     ) -> dict[str, Any]:
-        """Upload dataset to Phoenix.
+        """Upload dataset to Phoenix using SDK or HTTP fallback.
 
         Args:
             dataset: Prepared dataset examples
@@ -232,47 +470,96 @@ class PhoenixIntegration:
             Upload result with dataset ID and URL
         """
         dataset_name = f"golden_testset_v{version.replace('.', '_')}"
+
+        # Validate dataset before upload
+        is_valid, error_msg = self._validate_dataset(dataset)
+        if not is_valid:
+            raise ValueError(f"Dataset validation failed: {error_msg}")
+
+        # Try SDK upload first (preferred method)
+        if self.phoenix_client:
+            try:
+                logger.info("Using Phoenix SDK for upload (recommended method)")
+                return await self._upload_to_phoenix_sdk(dataset, dataset_name, version)
+            except Exception as e:
+                logger.warning(f"Phoenix SDK upload failed: {e}. Trying HTTP fallback...")
+
+        # Fallback to HTTP upload
+        return await self._upload_to_phoenix_http(dataset, dataset_name, version)
+
+    async def _upload_to_phoenix_http(
+        self, dataset: list[dict[str, Any]], dataset_name: str, version: str
+    ) -> dict[str, Any]:
+        """Upload dataset to Phoenix via HTTP API (fallback method).
+
+        Args:
+            dataset: Prepared dataset examples
+            dataset_name: Name for the dataset
+            version: Version string
+
+        Returns:
+            Upload result with dataset ID and URL
+        """
         upload_timestamp = datetime.utcnow().isoformat()
 
-        # Create Phoenix dataset payload
-        payload = {
-            "name": dataset_name,
-            "description": f"Golden testset version {version}",
-            "examples": dataset,
-            "metadata": {
-                "version": version,
-                "uploaded_at": upload_timestamp,
-                "example_count": len(dataset),
-                "project": self.config.project_name,
-            },
-        }
+        logger.info(f"📤 Preparing multipart upload to /v1/datasets/upload...")
 
-        # Upload via HTTP API
+        # Convert dataset to JSONL format for upload
+        jsonl_data = []
+        for example in dataset:
+            jsonl_data.append(json.dumps({
+                "input": example.get("input", ""),
+                "output": example.get("reference", ""),
+                "metadata": example.get("metadata", {}),
+            }))
+
+        jsonl_content = "\n".join(jsonl_data)
+
+        # Upload via HTTP API using multipart/form-data
         async with aiohttp.ClientSession() as session:
-            url = f"{self.config.endpoint}/v1/datasets"
+            url = f"{self.config.endpoint}/v1/datasets/upload"
             headers = self.config.get_headers()
+            # Remove Content-Type to let aiohttp set it with boundary
+            headers.pop("Content-Type", None)
+
+            # Create form data
+            form = aiohttp.FormData()
+            form.add_field(
+                'file',
+                io.BytesIO(jsonl_content.encode('utf-8')),
+                filename=f"{dataset_name}.jsonl",
+                content_type='application/jsonl'
+            )
+            form.add_field('dataset_name', dataset_name)
+            form.add_field('input_keys', '["input"]')
+            form.add_field('output_keys', '["output"]')
+
+            logger.info(f"🚀 Uploading {len(dataset)} examples to {url}...")
 
             async with session.post(
                 url,
-                json=payload,
+                data=form,
                 headers=headers,
                 timeout=aiohttp.ClientTimeout(total=self.config.upload_timeout),
             ) as response:
-                if response.status != 200:
+                if response.status not in [200, 201]:
                     error_text = await response.text()
                     raise Exception(
-                        f"Phoenix upload failed: {response.status} - {error_text}"
+                        f"Phoenix HTTP upload failed: {response.status} - {error_text}"
                     )
 
                 result = await response.json()
+                dataset_id = result.get("id") or result.get("dataset_id", "unknown")
+
+                logger.info(f"✅ HTTP upload successful! Dataset ID: {dataset_id}")
 
                 return {
-                    "dataset_id": result.get("id"),
+                    "dataset_id": dataset_id,
                     "dataset_name": dataset_name,
                     "version": version,
                     "example_count": len(dataset),
                     "upload_timestamp": upload_timestamp,
-                    "phoenix_url": f"{self.config.endpoint}/datasets/{result.get('id')}",
+                    "phoenix_url": f"{self.config.endpoint}/datasets/{dataset_id}",
                 }
 
     async def _update_upload_metadata(
