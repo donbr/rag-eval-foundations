@@ -143,7 +143,8 @@ def apply_globals(plan: Plan) -> None:
 
     # Ensure required secrets exist in environment
     missing = [
-        s for s in (plan.global_.get("secrets") or [])
+        s
+        for s in (plan.global_.get("secrets") or [])
         if os.environ.get(s) is None and s not in optional_secrets
     ]
     if missing:

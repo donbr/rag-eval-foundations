@@ -21,6 +21,7 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_experimental.text_splitter import SemanticChunker
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_postgres import PGEngine, PGVectorStore
+from langchain_text_splitters import MarkdownHeaderTextSplitter
 
 # Phoenix setup - using latest 2025 best practices with arize-phoenix-otel
 from phoenix.otel import register
@@ -81,28 +82,8 @@ class Config:
     load_csvs: bool = (
         False  # Flag to enable/disable CSV loading (disabled for PDF-only processing)
     )
+    load_markdowns: bool = True  # Flag to enable/disable Markdown loading
     overwrite_existing_tables: bool = True
-
-    def __post_init__(self):
-        if self.data_urls is None:
-            self.data_urls = [
-                (
-                    "https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw1.csv",
-                    "john_wick_1.csv",
-                ),
-                (
-                    "https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw2.csv",
-                    "john_wick_2.csv",
-                ),
-                (
-                    "https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw3.csv",
-                    "john_wick_3.csv",
-                ),
-                (
-                    "https://raw.githubusercontent.com/AI-Maker-Space/DataRepository/main/jw4.csv",
-                    "john_wick_4.csv",
-                ),
-            ]
 
 
 def setup_environment() -> Config:
@@ -216,14 +197,89 @@ async def load_pdf_documents(data_dir: Path) -> list:
     return pdf_docs
 
 
+async def load_markdown_documents(data_dir: Path) -> list:
+    """Load Markdown documents and split on level 2 headings (##)"""
+    markdown_docs = []
+    markdown_files = list(data_dir.glob("*.md"))
+
+    if not markdown_files:
+        logger.info("No Markdown files found in data directory")
+        return markdown_docs
+
+    logger.info(f"Found {len(markdown_files)} Markdown files to load")
+
+    # Define headers to split on - level 2 (##) is the primary split point
+    headers_to_split_on = [
+        ("#", "Header 1"),
+        ("##", "Header 2"),  # Split on major sections
+    ]
+
+    markdown_splitter = MarkdownHeaderTextSplitter(
+        headers_to_split_on=headers_to_split_on,
+        strip_headers=False,  # Keep headers in content for context
+    )
+
+    for md_file in markdown_files:
+        try:
+            # Read markdown content
+            markdown_content = md_file.read_text(encoding="utf-8")
+
+            # Split on headers to create semantic chunks
+            docs = markdown_splitter.split_text(markdown_content)
+
+            # Add metadata to each chunk
+            for doc in docs:
+                # Merge header metadata into single string for RAGAS compatibility
+                # RAGAS expects string metadata, not multiple header fields
+                section_title = None
+                if "Header 1" in doc.metadata and "Header 2" in doc.metadata:
+                    section_title = (
+                        f"{doc.metadata['Header 1']} | {doc.metadata['Header 2']}"
+                    )
+                    # Remove separate header fields to avoid RAGAS tuple creation
+                    del doc.metadata["Header 1"]
+                    del doc.metadata["Header 2"]
+                elif "Header 2" in doc.metadata:
+                    section_title = doc.metadata["Header 2"]
+                    del doc.metadata["Header 2"]
+                elif "Header 1" in doc.metadata:
+                    section_title = doc.metadata["Header 1"]
+                    del doc.metadata["Header 1"]
+
+                doc.metadata.update(
+                    {
+                        "source_type": "markdown",
+                        "document_name": md_file.stem,
+                        "last_accessed_at": datetime.now().isoformat(),
+                    }
+                )
+
+                # Add merged section title if available
+                if section_title:
+                    doc.metadata["section_title"] = section_title
+
+            markdown_docs.extend(docs)
+            logger.info(
+                f"Loaded {len(docs)} sections from {md_file.name} "
+                f"(split on ## headings)"
+            )
+
+        except Exception as e:
+            logger.error(f"Error loading Markdown {md_file.name}: {e}")
+            continue
+
+    return markdown_docs
+
+
 async def load_and_process_data(config: "Config") -> list:
-    """Load and process both CSV and PDF data"""
+    """Load and process CSV, PDF, and Markdown data"""
     data_dir = Path.cwd() / "data"
     data_dir.mkdir(exist_ok=True)
 
     all_docs = []
     csv_docs = []
     pdf_docs = []
+    markdown_docs = []
 
     # Load CSV data (John Wick reviews) - only if enabled
     if config.load_csvs:
@@ -284,9 +340,16 @@ async def load_and_process_data(config: "Config") -> list:
         logger.info(f"Loaded {len(pdf_docs)} PDF documents")
         all_docs.extend(pdf_docs)
 
+    # Load Markdown data if enabled
+    if config.load_markdowns:
+        logger.info("📝 Loading Markdown data...")
+        markdown_docs = await load_markdown_documents(data_dir)
+        logger.info(f"Loaded {len(markdown_docs)} Markdown documents")
+        all_docs.extend(markdown_docs)
+
     logger.info(
         f"📊 Total documents loaded: {len(all_docs)} "
-        f"(CSV: {len(csv_docs)}, PDF: {len(pdf_docs)})"
+        f"(CSV: {len(csv_docs)}, PDF: {len(pdf_docs)}, Markdown: {len(markdown_docs)})"
     )
 
     return all_docs
@@ -333,7 +396,9 @@ async def run_evaluation(question: str, chains: dict[str, Any]) -> dict[str, str
 
 
 async def main():
-    """Main execution function - loads both CSV and PDF documents for RAG evaluation"""
+    """
+    Main execution function - loads CSV, PDF, and Markdown documents for RAG evaluation
+    """
     try:
         # Setup
         config = setup_environment()
@@ -349,7 +414,9 @@ async def main():
         embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
 
         # Load data
-        logger.info("📥 Loading and processing documents from CSV and PDF sources...")
+        logger.info(
+            "📥 Loading and processing documents from CSV, PDF, and Markdown sources..."
+        )
         all_docs = await load_and_process_data(config)
 
         if not all_docs:
@@ -391,9 +458,10 @@ async def main():
         logger.info("🔍 Running evaluation...")
         # Use questions appropriate for financial aid documents
         test_questions = [
-            "What are the eligibility requirements for Federal Pell Grants?",
-            "How does the Direct Loan Program work?",
-            "What is the process for verifying financial aid applications?",
+            "Summarize the 'paradox of explicitness' in intent reformulation for LLM prompts.",
+            "List three factors that increase overreliance on AI in human-LLM decision-making.",
+            "What are the three most common ChatGPT conversation categories reported in 2024–2025?",
+            "Roughly what share of consumer messages are 'work'-related vs 'non-work' as of mid-2025?"
         ]
         question = test_questions[0]  # Start with the first question
 

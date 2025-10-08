@@ -121,8 +121,7 @@ class TestQualityValidator:
             GoldenExample(
                 question="Define machine learning",  # Semantic duplicate
                 ground_truth=(
-                    "Machine learning is an AI approach where systems "
-                    "learn from data."
+                    "Machine learning is an AI approach where systems learn from data."
                 ),
                 contexts=["ML definition"],
                 ragas_difficulty=1.0,
@@ -146,9 +145,7 @@ class TestQualityValidator:
         )
 
     @pytest.mark.asyncio
-    async def test_validate_diverse_testset_passes(
-        self, validator, sample_testset
-    ):
+    async def test_validate_diverse_testset_passes(self, validator, sample_testset):
         """Test that diverse testset passes quality validation"""
         result = await validator.validate_testset(sample_testset)
 
@@ -339,8 +336,7 @@ class TestQualityValidator:
 
         # Performance requirement from tasks.yaml: <100ms
         assert result.validation_duration_ms < 100, (
-            f"Validation took {result.validation_duration_ms}ms, "
-            "should be <100ms"
+            f"Validation took {result.validation_duration_ms}ms, should be <100ms"
         )
 
     @pytest.mark.asyncio
