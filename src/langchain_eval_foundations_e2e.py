@@ -465,7 +465,7 @@ async def main():
             "What are the three most common ChatGPT conversation categories reported "
             "in 2024–2025?",
             "Roughly what share of consumer messages are 'work'-related vs 'non-work' "
-            "as of mid-2025?"
+            "as of mid-2025?",
         ]
         question = test_questions[0]  # Start with the first question
 

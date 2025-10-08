@@ -123,9 +123,7 @@ def generate_testset(docs: list, llm, embeddings, testset_size: int = 10):
         )
 
         golden_testset_df = golden_testset.to_pandas()
-        logger.info(
-            f"✅ Successfully generated {len(golden_testset_df)} test examples"
-        )
+        logger.info(f"✅ Successfully generated {len(golden_testset_df)} test examples")
         return golden_testset_df
 
     except Exception as e:
