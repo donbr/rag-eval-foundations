@@ -12,7 +12,6 @@ Environment variables can override defaults via .env file.
 
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 # =============================================================================
 # Phoenix Observability Settings
@@ -24,7 +23,9 @@ PHOENIX_ENDPOINT = os.getenv("PHOENIX_ENDPOINT", "http://localhost:6006")
 PHOENIX_OTLP_ENDPOINT = os.getenv("PHOENIX_OTLP_ENDPOINT", "http://localhost:4317")
 """Phoenix OpenTelemetry collector endpoint"""
 
-PHOENIX_COLLECTOR_ENDPOINT = os.getenv("PHOENIX_COLLECTOR_ENDPOINT", "http://localhost:6006")
+PHOENIX_COLLECTOR_ENDPOINT = os.getenv(
+    "PHOENIX_COLLECTOR_ENDPOINT", "http://localhost:6006"
+)
 """Phoenix collector endpoint (legacy compatibility)"""
 
 PHOENIX_API_KEY = os.getenv("PHOENIX_API_KEY")
@@ -98,6 +99,7 @@ COHERE_RERANK_MODEL = "rerank-english-v3.0"
 # Helper Functions
 # =============================================================================
 
+
 def get_postgres_async_url() -> str:
     """Get PostgreSQL async connection string for asyncpg."""
     return (
@@ -117,9 +119,10 @@ def get_postgres_sync_url() -> str:
 @dataclass
 class PhoenixSettings:
     """Phoenix configuration settings."""
+
     endpoint: str = PHOENIX_ENDPOINT
     otlp_endpoint: str = PHOENIX_OTLP_ENDPOINT
-    api_key: Optional[str] = PHOENIX_API_KEY
+    api_key: str | None = PHOENIX_API_KEY
 
     def __post_init__(self):
         """Validate Phoenix settings."""
@@ -132,6 +135,7 @@ class PhoenixSettings:
 @dataclass
 class DatabaseSettings:
     """Database configuration settings."""
+
     user: str = POSTGRES_USER
     password: str = POSTGRES_PASSWORD
     host: str = POSTGRES_HOST
@@ -155,6 +159,7 @@ class DatabaseSettings:
 @dataclass
 class ModelSettings:
     """Model configuration settings."""
+
     llm_model: str = LLM_MODEL
     embedding_model: str = EMBEDDING_MODEL
     cohere_rerank_model: str = COHERE_RERANK_MODEL
@@ -168,14 +173,15 @@ class ModelSettings:
             )
         if self.embedding_model != "text-embedding-3-small":
             raise ValueError(
-                f"Embedding model must be 'text-embedding-3-small' per CLAUDE.md requirements. "
-                f"Got: {self.embedding_model}"
+                f"Embedding model must be 'text-embedding-3-small' "
+                f"per CLAUDE.md requirements. Got: {self.embedding_model}"
             )
 
 
 # =============================================================================
 # Convenience Functions
 # =============================================================================
+
 
 def get_all_settings() -> dict:
     """Get all configuration settings as a dictionary."""
@@ -186,7 +192,7 @@ def get_all_settings() -> dict:
         "golden_testset": {
             "name": GOLDEN_TESTSET_NAME,
             "size": GOLDEN_TESTSET_SIZE,
-        }
+        },
     }
 
 
@@ -205,6 +211,7 @@ def validate_config() -> bool:
 if __name__ == "__main__":
     """Print configuration when run directly."""
     import json
+
     print("=" * 60)
     print("RAG Evaluation Pipeline Configuration")
     print("=" * 60)

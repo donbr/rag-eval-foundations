@@ -1,0 +1,77 @@
+{
+  "mcpServers": {
+    "mcp-server-time": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-time",
+        "--local-timezone=America/Los_Angeles"
+      ],
+      "env": {}
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ]
+    },
+    "ai-docs-server": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "mcpdoc",
+        "mcpdoc",
+        "--urls",
+        "MCPProtocol:https://modelcontextprotocol.io/llms.txt",
+        "--urls",
+        "FastMCP:https://gofastmcp.com/llms.txt",
+        "--urls",
+        "LangChain:https://python.langchain.com/llms.txt",
+        "--urls",
+        "LangGraph:https://langchain-ai.github.io/langgraph/llms.txt",
+        "--urls",
+        "Anthropic:https://docs.anthropic.com/llms.txt",
+        "--transport",
+        "stdio",
+        "--follow-redirects",
+        "--timeout",
+        "20",
+        "--allowed-domains",
+        "modelcontextprotocol.io",
+        "python.langchain.com",
+        "langchain-ai.github.io",
+        "docs.anthropic.com",
+        "gofastmcp.com"
+      ]
+    },
+    "ai-docs-server-full": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "mcpdoc",
+        "mcpdoc",
+        "--urls",
+        "McpProtocolFull:https://modelcontextprotocol.io/llms-full.txt",
+        "--urls",
+        "FastMCPFull:https://gofastmcp.com/llms-full.txt",
+        "--urls",
+        "LangChain:https://python.langchain.com/llms-full.txt",
+        "--urls",
+        "LangGraphFull:https://langchain-ai.github.io/langgraph/llms-full.txt",
+        "--urls",
+        "AnthropicFull:https://docs.anthropic.com/llms-full.txt",
+        "--transport",
+        "stdio",
+        "--follow-redirects",
+        "--timeout",
+        "20",
+        "--allowed-domains",
+        "modelcontextprotocol.io",
+        "python.langchain.com",
+        "langchain-ai.github.io",
+        "docs.anthropic.com",
+        "gofastmcp.com"
+      ]
+    }
+  }
+}

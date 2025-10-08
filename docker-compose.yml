@@ -18,11 +18,6 @@ services:
       - rag_eval_postgres_data:/var/lib/postgresql/data
     networks:
       - rag-eval-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U langchain"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     labels:
       - "project=rag-eval-foundations"
       - "component=database"
@@ -38,11 +33,6 @@ services:
       - "${PHOENIX_OTLP_PORT:-4317}:4317"   # OpenTelemetry collector
     networks:
       - rag-eval-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6006/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     labels:
       - "project=rag-eval-foundations"
       - "component=observability"
