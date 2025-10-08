@@ -556,16 +556,6 @@ scripts/
     └── detect_scope_creep.py           # Scope validation
 ```
 
-**Flows** (`flows/`):
-```
-flows/
-└── golden_testset_flow.py              # Main Prefect 3.x hybrid flow
-```
-
-**Archived Flows** (see `docs/archived_flows/`):
-- golden_testset_flow_alternate.py (clean reference)
-- golden_testset_flow_prefect3.py (Prefect 3.x reference)
-
 **Validation** (`validation/`):
 ```
 validation/
@@ -611,26 +601,6 @@ validation/
 - Recommend appropriate version bumps (major/minor/patch)
 - Support intelligent versioning decisions
 
-#### **Prefect 3.x Flows** (flows/):
-
-**Main Flow** (`golden_testset_flow.py`):
-- Hybrid architecture: Clean core + optional enterprise features
-- Maps to `.claude/tasks.yaml` for phase-based execution
-- Modes: `--only-phase` (dev), `--production` (enterprise)
-- Optional features: `--enable-quality-gates`, `--enable-cost-tracking`, `--enable-git`
-
-**Usage**:
-```bash
-# Development: Run single phase
-python flows/golden_testset_flow.py --only-phase phase1
-
-# Production: All features
-python flows/golden_testset_flow.py --production --enable-quality-gates --enable-cost-tracking
-
-# Custom: Select features
-python flows/golden_testset_flow.py --enable-monitoring --enable-git
-```
-
 #### **Database Schema Validation**:
 ```bash
 # Validate all schema requirements
@@ -651,7 +621,6 @@ python scripts/db/dry_run_sql.py --sql "SELECT get_latest_testset_version('basel
 - **Semantic versioning**: Clear version progression with major/minor/patch
 - **Phoenix integration**: Unified observability for costs and quality
 - **Async-first**: All DB operations use asyncpg for performance
-- **Prefect 3.x flows**: Modern orchestration with explicit future resolution
 
 ### Extending the Framework
 
@@ -744,16 +713,8 @@ python validation/validate_telemetry.py
 ```
 
 **Validation Scripts** (scripts/validation/):
-```bash
-# Check implementation status against .claude/tasks.yaml
-python scripts/validation/check_implementation_status.py
 
-# Validate branch-phase alignment
-python scripts/validation/validate_branch_phase.py
-
-# Detect scope creep
-python scripts/validation/detect_scope_creep.py
-```
+*Note: These scripts are obsolete as they depend on .claude/tasks.yaml which has been removed along with Prefect flows.*
 
 **Database Validation**:
 ```bash
@@ -827,22 +788,17 @@ The `run_rag_evaluation_pipeline.py` script provides:
 Before pushing feature branches, complete this validation sequence:
 
 ```bash
-# 1. Validate phase completion against .claude/tasks.yaml
-python scripts/validation/check_implementation_status.py
-
-# 2. Check branch-phase alignment
-python scripts/validation/validate_branch_phase.py
-
-# 3. Run comprehensive tests
+# 1. Run comprehensive tests
 python -m pytest tests/unit/ -v
 python validation/postgres_data_analysis.py
 python validation/retrieval_strategy_comparison.py
 
-# 4. Verify no scope creep
-python scripts/validation/detect_scope_creep.py
+# 2. Ensure all dependencies are satisfied
+uv sync && python -c "import langchain, openai, cohere, ragas; print('✅ Core dependencies verified')"
 
-# 5. Ensure all dependencies are satisfied
-uv sync && python -c "import all_required_modules"
+# 3. Run linting and formatting checks
+ruff check src/ validation/ --fix
+ruff format src/ validation/
 ```
 
 #### Push Commands
@@ -875,11 +831,11 @@ gh pr create --title "Phase X: [Implementation Summary]" --body "## Implementati
 5. **Dependencies**: New packages or configuration requirements
 
 **Review Criteria:**
-- [ ] Phase requirements from `.claude/tasks.yaml` are met
-- [ ] All tests passing and validation scripts successful
-- [ ] No scope creep into other phases
+- [ ] All tests passing and validation successful
 - [ ] Proper error handling and logging
 - [ ] Documentation updated for new features
+- [ ] Code quality checks pass (ruff lint and format)
+- [ ] No security issues or hardcoded secrets
 
 ### External Documentation
 
