@@ -266,14 +266,16 @@ class PhoenixIntegration:
             if not isinstance(example, dict):
                 return False, f"Example {i} is not a dictionary"
 
-            # Check for either old format (question/ground_truth) or new format (input/reference)
+            # Check for either old format (question/ground_truth) or new format
+            # (input/reference)
             has_old_format = "question" in example or "ground_truth" in example
             has_new_format = "input" in example or "reference" in example
 
             if not (has_old_format or has_new_format):
                 return (
                     False,
-                    f"Example {i} missing required fields (input/reference or question/ground_truth)",
+                    f"Example {i} missing required fields "
+                    f"(input/reference or question/ground_truth)",
                 )
 
             # Validate non-empty values
@@ -767,12 +769,15 @@ class PhoenixIntegration:
                 if response.status not in [200, 201]:
                     error_text = await response.text()
                     raise Exception(
-                        f"Failed to configure model pricing: {response.status} - {error_text}"
+                        f"Failed to configure model pricing: "
+                        f"{response.status} - {error_text}"
                     )
 
                 result = await response.json()
                 logger.info(
-                    f"Configured pricing for {model_name}: ${input_cost_per_million}/1M input, ${output_cost_per_million}/1M output"
+                    f"Configured pricing for {model_name}: "
+                    f"${input_cost_per_million}/1M input, "
+                    f"${output_cost_per_million}/1M output"
                 )
                 return result
 

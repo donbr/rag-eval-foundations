@@ -2,8 +2,9 @@
 """
 Change Detection Module for Golden Testset Management
 
-Provides efficient document change detection using content hashing and comparison algorithms.
-Supports multiple hashing strategies with performance optimization under 100ms requirement.
+Provides efficient document change detection using content hashing and
+comparison algorithms. Supports multiple hashing strategies with performance
+optimization under 100ms requirement.
 
 Key Features:
 - Content-based change detection using SHA-256 and MD5 hashing
@@ -443,7 +444,8 @@ class ChangeDetector:
             # Check performance target per batch
             if batch_result.processing_time_ms > self.performance_target_ms:
                 logger.warning(
-                    f"Batch processing exceeded target: {batch_result.processing_time_ms:.2f}ms"
+                    f"Batch processing exceeded target: "
+                    f"{batch_result.processing_time_ms:.2f}ms"
                 )
 
         cache_hit_rate = 0.0

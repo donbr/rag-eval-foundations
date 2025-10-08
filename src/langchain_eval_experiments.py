@@ -170,8 +170,9 @@ async def main():
     )
     embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
 
-    RAG_TEMPLATE = """\
-You are a helpful and kind assistant. Use the context provided below to answer the question.
+    rag_template = """\
+You are a helpful and kind assistant. Use the context provided below to \
+answer the question.
 
 If you do not know the answer, or are unsure, say you don't know.
 
@@ -181,7 +182,7 @@ Query:
 Context:
 {context}
 """
-    rag_prompt = ChatPromptTemplate.from_template(RAG_TEMPLATE)
+    rag_prompt = ChatPromptTemplate.from_template(rag_template)
 
     # Use shared configuration
     async_url = get_postgres_async_url()
@@ -246,7 +247,10 @@ Context:
                 task=create_enhanced_task_function(chain, strategy_name),
                 evaluators=[qa_correctness_evaluator, rag_relevance_evaluator],
                 experiment_name=experiment_name,
-                experiment_description=f"QA correctness and RAG relevance evaluation for {strategy_name}",
+                experiment_description=(
+                    f"QA correctness and RAG relevance evaluation for "
+                    f"{strategy_name}"
+                ),
             )
 
             print(f"✅ {strategy_name} experiment completed!")

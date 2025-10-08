@@ -77,8 +77,16 @@ async def upload_to_phoenix_integrated(
     valid_examples = 0
     for idx, row in golden_testset_df.iterrows():
         # Handle different possible column names from RAGAS
-        user_input = row.get("user_input") or row.get("question") or row.get("input", "")
-        reference = row.get("reference") or row.get("ground_truth") or row.get("expected_output", "")
+        user_input = (
+            row.get("user_input")
+            or row.get("question")
+            or row.get("input", "")
+        )
+        reference = (
+            row.get("reference")
+            or row.get("ground_truth")
+            or row.get("expected_output", "")
+        )
         contexts = row.get("reference_contexts") or row.get("contexts", [])
 
         # Skip empty examples

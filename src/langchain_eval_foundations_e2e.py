@@ -48,11 +48,14 @@ logging.getLogger("openai._base_client").setLevel(logging.WARNING)
 logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
 
 # Centralized prompt template
-RAG_PROMPT = ChatPromptTemplate.from_template("""You are a helpful assistant. Use the context below to answer the question.
+RAG_PROMPT = ChatPromptTemplate.from_template(
+    """You are a helpful assistant. Use the context below to answer the \
+question.
 If you don't know the answer, say you don't know.
 
 Question: {question}
-Context: {context}""")
+Context: {context}"""
+)
 
 
 @dataclass
@@ -282,14 +285,19 @@ async def load_and_process_data(config: "Config") -> list:
         all_docs.extend(pdf_docs)
 
     logger.info(
-        f"📊 Total documents loaded: {len(all_docs)} (CSV: {len(csv_docs)}, PDF: {len(pdf_docs)})"
+        f"📊 Total documents loaded: {len(all_docs)} "
+        f"(CSV: {len(csv_docs)}, PDF: {len(pdf_docs)})"
     )
 
     return all_docs
 
 
 def create_rag_chain(retriever, llm, method_name: str):
-    """Create a simple RAG chain with method identification - Phoenix auto-traces this"""
+    """
+    Create a simple RAG chain with method identification.
+
+    Phoenix auto-traces this function.
+    """
     chain = (
         {
             "context": itemgetter("question") | retriever,

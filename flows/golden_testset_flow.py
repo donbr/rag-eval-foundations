@@ -6,7 +6,8 @@ Combines clean execution core with optional enterprise features
 This hybrid flow provides:
 - Clean Prefect 3.x core (1:1 YAML mapping, explicit future resolution)
 - Optional enterprise features: Git workflow, quality gates, monitoring, cost tracking
-- Dual CLI modes: Simple development (`--only-phase`) and advanced production (`--production`)
+- Dual CLI modes: Simple development (`--only-phase`) and advanced
+  production (`--production`)
 - Flexible composition: Optional enterprise layers
 
 Usage:
@@ -329,7 +330,9 @@ def run_task(
         elapsed = float(run_res.get("elapsed_ms", 0.0))
         if task_spec.perf_budget_ms and elapsed > task_spec.perf_budget_ms:
             raise PrefectException(
-                f"Perf budget exceeded for {task_spec.id}: {format_seconds(elapsed)} > {format_seconds(task_spec.perf_budget_ms)}"
+                f"Perf budget exceeded for {task_spec.id}: "
+                f"{format_seconds(elapsed)} > "
+                f"{format_seconds(task_spec.perf_budget_ms)}"
             )
     else:
         logger.warning("No 'run:' commands defined; skipping RUN step.")
@@ -412,7 +415,8 @@ def orchestrate(
         for dep in p.depends_on:
             if index.get(dep, -1) >= index[p.id]:
                 raise RuntimeError(
-                    f"Phase ordering invalid: {p.id} depends on {dep} which appears after it"
+                    f"Phase ordering invalid: {p.id} depends on {dep} "
+                    f"which appears after it"
                 )
 
     outputs = []

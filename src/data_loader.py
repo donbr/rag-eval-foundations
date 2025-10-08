@@ -16,15 +16,15 @@ def load_docs_from_postgres(
     """
     load_dotenv()
 
-    POSTGRES_USER = os.getenv("POSTGRES_USER", "langchain")
-    POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "langchain")
-    POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
-    POSTGRES_PORT = os.getenv("POSTGRES_PORT", "6024")
-    POSTGRES_DB = os.getenv("POSTGRES_DB", "langchain")
+    postgres_user = os.getenv("POSTGRES_USER", "langchain")
+    postgres_password = os.getenv("POSTGRES_PASSWORD", "langchain")
+    postgres_host = os.getenv("POSTGRES_HOST", "localhost")
+    postgres_port = os.getenv("POSTGRES_PORT", "6024")
+    postgres_db = os.getenv("POSTGRES_DB", "langchain")
 
     sync_conn_str = (
-        f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@"
-        f"{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+        f"postgresql://{postgres_user}:{postgres_password}@"
+        f"{postgres_host}:{postgres_port}/{postgres_db}"
     )
 
     engine = create_engine(sync_conn_str)
@@ -43,7 +43,8 @@ def load_docs_from_postgres(
     except Exception as e:
         logger.error(f"Error executing query: {e}")
         logger.error(
-            "Please ensure the table name is correct and that the source script has run successfully."
+            "Please ensure the table name is correct and that the source "
+            "script has run successfully."
         )
         return []
 

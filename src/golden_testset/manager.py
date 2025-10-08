@@ -252,7 +252,8 @@ class GoldenTestsetManager:
         """Get database connection from pool (async context manager)"""
         if not self.db_manager:
             raise RuntimeError(
-                "Database manager not initialized. Use 'async with manager' or call connect() first."
+                "Database manager not initialized. Use 'async with manager' "
+                "or call connect() first."
             )
         return self.db_manager.get_connection()
 
@@ -260,7 +261,8 @@ class GoldenTestsetManager:
         """Get database transaction (async context manager)"""
         if not self.db_manager:
             raise RuntimeError(
-                "Database manager not initialized. Use 'async with manager' or call connect() first."
+                "Database manager not initialized. Use 'async with manager' "
+                "or call connect() first."
             )
         return self.db_manager.transaction()
 
@@ -333,10 +335,14 @@ class GoldenTestsetManager:
             await conn.execute(
                 """
                 INSERT INTO golden_testsets (
-                    id, name, description, version_major, version_minor, version_patch, version_label,
-                    domain, source_type, status, validation_status, created_at, created_by,
+                    id, name, description, version_major, version_minor,
+                    version_patch, version_label, domain, source_type, status,
+                    validation_status, created_at, created_by,
                     phoenix_project_id, phoenix_experiment_id, quality_score
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                    $14, $15, $16
+                )
             """,
                 testset.id,
                 testset.name,
@@ -426,8 +432,9 @@ class GoldenTestsetManager:
 
                 query = """
                     SELECT * FROM golden_testsets
-                    WHERE name = $1 AND version_major = $2 AND version_minor = $3 AND version_patch = $4
-                    AND ($5::text IS NULL OR version_label = $5)
+                    WHERE name = $1 AND version_major = $2
+                        AND version_minor = $3 AND version_patch = $4
+                        AND ($5::text IS NULL OR version_label = $5)
                 """
                 row = await conn.fetchrow(query, name, major, minor, patch, label)
             else:
@@ -599,10 +606,14 @@ class GoldenTestsetManager:
                 await conn.execute(
                     """
                     INSERT INTO golden_testsets (
-                        id, name, description, version_major, version_minor, version_patch, version_label,
-                        domain, source_type, status, validation_status, created_at, created_by,
+                        id, name, description, version_major, version_minor,
+                        version_patch, version_label, domain, source_type,
+                        status, validation_status, created_at, created_by,
                         phoenix_project_id, phoenix_experiment_id, quality_score
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                    ) VALUES (
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                        $13, $14, $15, $16
+                    )
                 """,
                     new_testset.id,
                     new_testset.name,
@@ -794,7 +805,7 @@ class GoldenTestsetManager:
                     UPDATE golden_testsets
                     SET status = 'approved', validation_status = 'passed'
                     WHERE id = $1 AND status != 'deprecated'
-                """,
+                    """,
                     testset_id,
                 )
 
@@ -805,9 +816,10 @@ class GoldenTestsetManager:
                 await conn.execute(
                     """
                     INSERT INTO testset_approval_log (
-                        testset_id, reviewer, review_status, review_comments, review_checklist
+                        testset_id, reviewer, review_status, review_comments,
+                        review_checklist
                     ) VALUES ($1, $2, $3, $4, $5)
-                """,
+                    """,
                     testset_id,
                     reviewer,
                     "approved",
@@ -825,7 +837,10 @@ class GoldenTestsetManager:
     # =========================================================================
 
     async def _insert_example(
-        self, conn: asyncpg.Connection, testset_id: str, example: GoldenExample
+        self,
+        conn: asyncpg.Connection,
+        testset_id: str,
+        example: GoldenExample,
     ) -> None:
         """Insert a single example into the database"""
         await conn.execute(
@@ -836,8 +851,11 @@ class GoldenTestsetManager:
                 retrieval_strategy, retrieval_score,
                 context_precision, context_recall, faithfulness, answer_relevancy,
                 question_embedding, ground_truth_embedding
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-        """,
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                $15, $16
+            )
+            """,
             example.id,
             testset_id,
             example.question,
@@ -1067,7 +1085,10 @@ class GoldenTestsetManager:
 
             await conn.executemany(
                 """
-                INSERT INTO golden_examples (id, testset_id, question, ground_truth, metadata, created_at)
+                INSERT INTO golden_examples (
+                    id, testset_id, question, ground_truth, metadata,
+                    created_at
+                )
                 VALUES ($1, $2, $3, $4, $5, $6)
             """,
                 example_data,
@@ -1192,8 +1213,9 @@ class GoldenTestsetManager:
                 SELECT version_major, version_minor, version_patch, created_at
                 FROM golden_testsets
                 WHERE name = $1
-                ORDER BY version_major DESC, version_minor DESC, version_patch DESC
-            """,
+                ORDER BY version_major DESC, version_minor DESC,
+                    version_patch DESC
+                """,
                 testset_name,
             )
 
@@ -1210,8 +1232,8 @@ class GoldenTestsetManager:
             await conn.execute(
                 """
                 INSERT INTO testset_quality_metrics (
-                    testset_id, accuracy, precision, recall, f1_score, coverage, diversity,
-                    validation_status, updated_at
+                    testset_id, accuracy, precision, recall, f1_score,
+                    coverage, diversity, validation_status, updated_at
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 ON CONFLICT (testset_id) DO UPDATE SET
                     accuracy = EXCLUDED.accuracy,
@@ -1277,10 +1299,18 @@ if __name__ == "__main__":
             # Create sample examples
             examples = [
                 GoldenExample(
-                    question="What are the eligibility requirements for Federal Pell Grants?",
-                    ground_truth="Federal Pell Grants are available to undergraduate students who demonstrate exceptional financial need and have not earned a bachelor's degree.",
+                    question=(
+                        "What are the eligibility requirements for Federal "
+                        "Pell Grants?"
+                    ),
+                    ground_truth=(
+                        "Federal Pell Grants are available to undergraduate "
+                        "students who demonstrate exceptional financial need "
+                        "and have not earned a bachelor's degree."
+                    ),
                     contexts=[
-                        "Federal Pell Grants are need-based grants for undergraduate students."
+                        "Federal Pell Grants are need-based grants for "
+                        "undergraduate students."
                     ],
                     ragas_question_type="simple",
                     ragas_evolution_type="reasoning",

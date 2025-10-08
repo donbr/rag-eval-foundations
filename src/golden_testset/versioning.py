@@ -247,7 +247,8 @@ class VersionManager:
             # Validate against rules
             if major > self.validation_rules["max_major"]:
                 raise VersionValidationError(
-                    f"Major version {major} exceeds maximum {self.validation_rules['max_major']}"
+                    f"Major version {major} exceeds maximum "
+                    f"{self.validation_rules['max_major']}"
                 )
 
             if label and label in self.validation_rules["reserved_labels"]:
@@ -428,8 +429,8 @@ class VersionManager:
                 major_diff = latest.major - proposed_version.major
                 if major_diff > 1:
                     conflicts.append(
-                        f"Proposed version {proposed_version} is {major_diff} major versions "
-                        f"behind latest {latest}"
+                        f"Proposed version {proposed_version} is "
+                        f"{major_diff} major versions behind latest {latest}"
                     )
 
         # Check for suspicious jumps

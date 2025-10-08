@@ -186,7 +186,10 @@ class QualityValidator:
 
         return ValidationResult(
             testset_name=testset.name,
-            version=f"{testset.version_major}.{testset.version_minor}.{testset.version_patch}",
+            version=(
+                f"{testset.version_major}.{testset.version_minor}."
+                f"{testset.version_patch}"
+            ),
             metrics=metrics,
             example_count=len(examples),
             validation_duration_ms=duration_ms,
@@ -465,8 +468,10 @@ class QualityValidator:
 
         if metrics.diversity_score < self.min_diversity_score:
             recommendations.append(
-                f"Increase question diversity (current: {metrics.diversity_score:.3f}). "
-                "Add questions covering different topics, phrasings, and complexity levels."
+                f"Increase question diversity "
+                f"(current: {metrics.diversity_score:.3f}). "
+                "Add questions covering different topics, phrasings, and "
+                "complexity levels."
             )
 
         if metrics.duplicate_count > 0:
@@ -483,7 +488,8 @@ class QualityValidator:
 
         if metrics.semantic_coherence < 0.5:
             recommendations.append(
-                f"Improve question-answer alignment (current: {metrics.semantic_coherence:.3f}). "
+                f"Improve question-answer alignment "
+                f"(current: {metrics.semantic_coherence:.3f}). "
                 "Ensure answers directly address the questions asked."
             )
 
@@ -496,7 +502,8 @@ class QualityValidator:
         # General recommendations based on testset size
         if len(examples) < 10:
             recommendations.append(
-                "Consider adding more examples for better statistical validity (minimum 10 recommended)."
+                "Consider adding more examples for better statistical "
+                "validity (minimum 10 recommended)."
             )
 
         return recommendations
