@@ -33,6 +33,7 @@ from config import (
     PHOENIX_ENDPOINT,
     SEMANTIC_TABLE,
     VECTOR_SIZE,
+    get_postgres_async_url,
 )
 
 # Configure logging
@@ -127,7 +128,7 @@ async def setup_vector_store(
     config: Config, table_name: str, embeddings
 ) -> PGVectorStore:
     """Reusable function to setup vector stores"""
-    pg_engine = PGEngine.from_connection_string(url=config.async_url)
+    pg_engine = PGEngine.from_connection_string(url=get_postgres_async_url())
 
     await pg_engine.ainit_vectorstore_table(
         table_name=table_name,
