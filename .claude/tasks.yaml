@@ -26,8 +26,6 @@ global:
   secrets:
     - OPENAI_API_KEY
     - COHERE_API_KEY
-    - PHOENIX_API_KEY
-    - PHOENIX_CLIENT_HEADERS
   quality_gates:
     critical:
       - "db_txn_atomic"

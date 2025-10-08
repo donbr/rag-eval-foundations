@@ -138,9 +138,13 @@ def apply_globals(plan: Plan) -> None:
     for k, v in (plan.global_.get("env") or {}).items():
         os.environ[k] = os.path.expandvars(v) if isinstance(v, str) else str(v)
 
-    # Ensure secrets exist in environment
+    # Define optional secrets that can be missing in CI/dev environments
+    optional_secrets = {"PHOENIX_API_KEY", "PHOENIX_CLIENT_HEADERS"}
+
+    # Ensure required secrets exist in environment
     missing = [
-        s for s in (plan.global_.get("secrets") or []) if os.environ.get(s) is None
+        s for s in (plan.global_.get("secrets") or [])
+        if os.environ.get(s) is None and s not in optional_secrets
     ]
     if missing:
         raise RuntimeError(

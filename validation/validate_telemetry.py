@@ -7,18 +7,18 @@ It includes examples of simple chains, RAG components, error handling, and strea
 """
 
 import os
-import asyncio
+
 from dotenv import load_dotenv
 
 # Set Phoenix endpoint before importing
 os.environ["PHOENIX_COLLECTOR_ENDPOINT"] = "http://localhost:4317"
 
-from phoenix.otel import register
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
-from langchain_core.documents import Document
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from phoenix.otel import register
+
 
 def setup_phoenix():
     """Configure Phoenix tracing"""
@@ -36,15 +36,15 @@ def test_simple_chain():
     print("\n" + "=" * 80)
     print("SIMPLE CHAIN EXAMPLE")
     print("=" * 80)
-    
+
     # Create a simple prompt and chain
     prompt = ChatPromptTemplate.from_template("{x} {y} {z}?").partial(x="why is", z="blue")
     chain = prompt | ChatOpenAI(model_name="gpt-4.1-mini")
-    
+
     result = chain.invoke(dict(y="sky"))
-    print(f"Question: why is sky blue?")
+    print("Question: why is sky blue?")
     print(f"Answer: {result.content[:200]}...")
-    
+
     return result
 
 def test_complex_chains():
@@ -52,7 +52,7 @@ def test_complex_chains():
     print("\n" + "=" * 80)
     print("COMPLEX CHAIN EXAMPLES")
     print("=" * 80)
-    
+
     # Example 1: Math calculator
     print("\n1. Math Calculator Chain:")
     math_chain = (
@@ -60,24 +60,24 @@ def test_complex_chains():
         | ChatOpenAI(model_name="gpt-4.1-mini")
         | StrOutputParser()
     ).with_config({"run_name": "math_calculator"})
-    
+
     result = math_chain.invoke({"x": 15, "y": 27})
     print(f"Result: {result}")
-    
+
     # Example 2: Text analyzer
     print("\n2. Text Analyzer Chain:")
     analysis_prompt = ChatPromptTemplate.from_messages([
         ("system", "You are a helpful assistant that analyzes text."),
         ("user", "Analyze this text and provide key insights: {text}")
     ])
-    
+
     analysis_chain = (
         {"text": RunnablePassthrough()}
         | analysis_prompt
         | ChatOpenAI(model_name="gpt-4.1-mini", temperature=0)
         | StrOutputParser()
     ).with_config({"run_name": "text_analyzer"})
-    
+
     sample_text = "John Wick is an action movie franchise known for its choreographed fight scenes."
     analysis = analysis_chain.invoke(sample_text)
     print(f"Analysis: {analysis[:200]}...")
@@ -87,21 +87,21 @@ def test_rag_components():
     print("\n" + "=" * 80)
     print("RAG PIPELINE SIMULATION")
     print("=" * 80)
-    
+
     # Example 3: Embedding generation
     print("\n3. Embedding Generation:")
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-    
+
     sample_docs = [
         "John Wick is a retired assassin who comes back for revenge.",
         "The action sequences in John Wick are beautifully choreographed.",
         "Keanu Reeves delivers an excellent performance as John Wick."
     ]
-    
+
     print("Generating embeddings...")
     doc_embeddings = embeddings.embed_documents(sample_docs)
     print(f"✅ Generated {len(doc_embeddings)} embeddings, each with {len(doc_embeddings[0])} dimensions")
-    
+
     # Example 4: Simulated RAG chain
     print("\n4. Mock RAG Pipeline:")
     rag_prompt = ChatPromptTemplate.from_template("""
@@ -112,11 +112,11 @@ Context: {context}
 Question: {question}
 
 Answer:""")
-    
+
     def mock_retriever(question):
         """Mock retriever function"""
         return "\n".join(sample_docs)
-    
+
     rag_chain = (
         {
             "context": lambda x: mock_retriever(x["question"]),
@@ -129,7 +129,7 @@ Answer:""")
         "run_name": "rag_pipeline",
         "metadata": {"pipeline_type": "mock_rag"}
     })
-    
+
     question = "What is John Wick about?"
     answer = rag_chain.invoke({"question": question})
     print(f"Question: {question}")
@@ -140,25 +140,25 @@ def test_error_handling():
     print("\n" + "=" * 80)
     print("ERROR HANDLING EXAMPLES")
     print("=" * 80)
-    
+
     # Example 5: Division calculator with edge cases
     print("\n5. Division Calculator (with error cases):")
     risky_prompt = ChatPromptTemplate.from_template(
         "Calculate the result of {number} divided by {divisor}"
     )
-    
+
     risky_chain = (
         risky_prompt
         | ChatOpenAI(model_name="gpt-4.1-mini")
         | StrOutputParser()
     ).with_config({"run_name": "division_calculator"})
-    
+
     test_cases = [
         {"number": 100, "divisor": 5},
         {"number": 42, "divisor": 0},
         {"number": 7, "divisor": 3}
     ]
-    
+
     for test in test_cases:
         try:
             result = risky_chain.invoke(test)
@@ -173,12 +173,12 @@ def test_streaming():
     print("=" * 80)
     print("Watch the traces update in real-time at http://localhost:6006")
     print("-" * 80)
-    
+
     streaming_chain = (
         ChatPromptTemplate.from_template("Tell me 3 facts about {topic}")
         | ChatOpenAI(model_name="gpt-4.1-mini", streaming=True)
     ).with_config({"run_name": "streaming_facts"})
-    
+
     print("Streaming response:")
     for chunk in streaming_chain.stream({"topic": "Phoenix observability"}):
         print(chunk.content, end="", flush=True)
@@ -215,13 +215,13 @@ def main():
     """Main execution function"""
     print("Phoenix Telemetry Validation and LLM Observability Demo")
     print("=" * 80)
-    
+
     # Load environment variables
     load_dotenv()
-    
+
     # Setup Phoenix
     setup_phoenix()
-    
+
     try:
         # Run all test examples
         test_simple_chain()
@@ -229,13 +229,13 @@ def main():
         test_rag_components()
         test_error_handling()
         test_streaming()
-        
+
         # Print analysis tips
         print_analysis_tips()
-        
+
         print("\n✅ All examples completed successfully!")
         print("📊 Check your traces at: http://localhost:6006")
-        
+
     except Exception as e:
         print(f"\n❌ Error during execution: {e}")
         print("\nMake sure:")
