@@ -248,8 +248,7 @@ Context:
                 evaluators=[qa_correctness_evaluator, rag_relevance_evaluator],
                 experiment_name=experiment_name,
                 experiment_description=(
-                    f"QA correctness and RAG relevance evaluation for "
-                    f"{strategy_name}"
+                    f"QA correctness and RAG relevance evaluation for {strategy_name}"
                 ),
             )
 

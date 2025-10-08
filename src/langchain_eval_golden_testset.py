@@ -77,11 +77,11 @@ async def upload_to_phoenix_integrated(
     valid_examples = 0
     for idx, row in golden_testset_df.iterrows():
         # Handle different possible column names from RAGAS
+
         user_input = (
-            row.get("user_input")
-            or row.get("question")
-            or row.get("input", "")
+            row.get("user_input") or row.get("question") or row.get("input", "")
         )
+
         reference = (
             row.get("reference")
             or row.get("ground_truth")
@@ -186,6 +186,7 @@ async def main():
 
     # Verify file was written
     import os
+
     file_size = os.path.getsize("golden_testset.json")
     logger.info(f"💾 Saved golden testset to golden_testset.json ({file_size} bytes)")
 

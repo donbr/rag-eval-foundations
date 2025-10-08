@@ -1300,8 +1300,7 @@ if __name__ == "__main__":
             examples = [
                 GoldenExample(
                     question=(
-                        "What are the eligibility requirements for Federal "
-                        "Pell Grants?"
+                        "What are the eligibility requirements for Federal Pell Grants?"
                     ),
                     ground_truth=(
                         "Federal Pell Grants are available to undergraduate "

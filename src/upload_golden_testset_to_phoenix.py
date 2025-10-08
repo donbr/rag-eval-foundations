@@ -69,8 +69,7 @@ async def upload_existing_golden_testset(
 
     total = len(golden_testset_records)
     print(
-        f"✅ Validation complete: {valid_count}/{total} examples "
-        "have required fields"
+        f"✅ Validation complete: {valid_count}/{total} examples have required fields"
     )
 
     # Transform to the format expected by PhoenixIntegration
