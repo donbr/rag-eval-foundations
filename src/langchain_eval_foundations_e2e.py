@@ -458,10 +458,14 @@ async def main():
         logger.info("🔍 Running evaluation...")
         # Use questions appropriate for financial aid documents
         test_questions = [
-            "Summarize the 'paradox of explicitness' in intent reformulation for LLM prompts.",
-            "List three factors that increase overreliance on AI in human-LLM decision-making.",
-            "What are the three most common ChatGPT conversation categories reported in 2024–2025?",
-            "Roughly what share of consumer messages are 'work'-related vs 'non-work' as of mid-2025?"
+            "Summarize the 'paradox of explicitness' in intent reformulation for "
+            "LLM prompts.",
+            "List three factors that increase overreliance on AI in human-LLM "
+            "decision-making.",
+            "What are the three most common ChatGPT conversation categories reported "
+            "in 2024–2025?",
+            "Roughly what share of consumer messages are 'work'-related vs 'non-work' "
+            "as of mid-2025?"
         ]
         question = test_questions[0]  # Start with the first question
 

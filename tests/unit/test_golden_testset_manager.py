@@ -607,7 +607,7 @@ class TestErrorHandling:
             mock_db_class.return_value = mock_db
 
             with pytest.raises(ConnectionError):
-                async with GoldenTestsetManager() as manager:
+                async with GoldenTestsetManager():
                     pass
 
     @pytest.mark.asyncio

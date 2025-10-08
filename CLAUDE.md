@@ -2,6 +2,38 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Quick Reference
+
+**Most Common Commands:**
+```bash
+# Complete setup and run pipeline
+uv venv --python 3.13 && source .venv/bin/activate
+uv sync
+python claude_code_scripts/run_rag_evaluation_pipeline.py
+
+# Verify environment
+python --version  # Should be 3.13.x or higher
+python -c "import langchain, openai, cohere, ragas; print('✅ Core dependencies verified')"
+
+# Verify services are running
+docker ps --filter 'label=project=rag-eval-foundations'
+PGPASSWORD=langchain psql -h localhost -p 6024 -U langchain -d langchain -c "\dt"
+
+# Code quality checks
+ruff check src/ --fix && ruff format src/
+
+# Run validation suite
+python validation/postgres_data_analysis.py
+python validation/retrieval_strategy_comparison.py
+```
+
+**Troubleshooting Quick Index:**
+- [Service port conflicts](#service-port-conflicts)
+- [Vector search returns no results](#vector-search-returns-no-results)
+- [Phoenix connection issues](#phoenix-connection-issues)
+- [API rate limits](#api-rate-limits)
+- [Async event loop errors](#async-event-loop-errors)
+
 ## Project Overview
 
 A production-ready 3-stage RAG evaluation pipeline implementing 6 retrieval strategies with RAGAS-based golden testset generation and Phoenix observability. The project includes Phase 4 golden testset management with PostgreSQL-backed versioning, cost tracking, and quality validation.
@@ -13,7 +45,7 @@ A production-ready 3-stage RAG evaluation pipeline implementing 6 retrieval stra
 - **Quality Validation**: RAGAS metrics with configurable thresholds
 - **Full Observability**: Phoenix tracing for all LLM operations
 
-**Validated Performance** (October 2025): Complete pipeline tested with 269 PDF documents, full Phoenix integration, database-backed testset management, and comprehensive validation tooling.
+**Current Status** (As of October 2025): Complete pipeline tested with 269 PDF documents, full Phoenix integration, database-backed testset management, and comprehensive validation tooling.
 
 ## Key Commands
 
@@ -22,6 +54,9 @@ A production-ready 3-stage RAG evaluation pipeline implementing 6 retrieval stra
 **IMPORTANT**: This project requires Python 3.13+ and uses `uv` for package management.
 
 ```bash
+# Verify Python version first
+python --version  # Must show 3.13.x or higher
+
 # Install uv if not already installed
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -37,6 +72,14 @@ uv sync
 
 # Verify critical dependencies
 python -c "import langchain, openai, cohere, ragas, pypdf, matplotlib, seaborn, psycopg2, asyncpg; print('All dependencies verified')"
+
+# Validate environment variables are set
+python -c "
+import os
+required = ['OPENAI_API_KEY', 'COHERE_API_KEY']
+missing = [k for k in required if not os.getenv(k)]
+print('✅ All required API keys set' if not missing else f'❌ Missing: {missing}')
+"
 ```
 
 **Key Dependencies** (automatically installed via `uv sync`):
@@ -84,7 +127,7 @@ python validation/retrieval_strategy_comparison.py
 ```bash
 # Essential validation sequence (run after main pipeline)
 python validation/postgres_data_analysis.py        # Database analysis
-python validation/retrieval_strategy_comparison.py # Strategy benchmarking  
+python validation/retrieval_strategy_comparison.py # Strategy benchmarking
 python validation/validate_telemetry.py           # Phoenix tracing validation
 
 # Dependency verification
@@ -131,7 +174,7 @@ tail -f logs/rag_evaluation_$(date +%Y%m%d)*.log
 ls -t logs/*.log | tail -n +11 | xargs rm -f
 ```
 
-**Note:** 
+**Note:**
 - Run the main pipeline first to populate data before using validation scripts
 - Validation scripts are updated to work with the current PDF-based data (financial aid documents)
 - Scripts generate visualizations in `outputs/charts/` with data distributions, embedding analysis, and performance comparisons
@@ -209,8 +252,8 @@ docker run -it --rm --name phoenix-container \
 
 ## Configuration System
 
-**Shared Configuration (October 2025):**
-All scripts now use a centralized configuration system via `src/config.py`:
+**Centralized Configuration:**
+All scripts use a centralized configuration system via `src/config.py`. This provides a single source of truth for all settings with environment variable overrides.
 
 ```python
 from config import (
@@ -232,7 +275,22 @@ from config import (
 - ✅ Environment variable support with sensible defaults
 - ✅ Type-safe dataclasses with validation
 
-See `src/config.py` for complete configuration options.
+**Environment Variables** (`.env` file):
+
+Required:
+- `OPENAI_API_KEY`: OpenAI API key for embeddings and LLM
+- `COHERE_API_KEY`: Cohere API key for reranking
+
+Optional (with defaults):
+- `PHOENIX_ENDPOINT`: Phoenix UI endpoint (default: http://localhost:6006)
+- `PHOENIX_OTLP_ENDPOINT`: OTLP collector (default: http://localhost:4317)
+- `POSTGRES_HOST`: Database host (default: localhost)
+- `POSTGRES_PORT`: Database port (default: 6024)
+- `GOLDEN_TESTSET_SIZE`: Testset size (default: 10)
+
+**SECURITY NOTE**: Never commit `.env` files or hardcode API keys. Always use `.env.example` as a template with placeholder values only.
+
+See `.env.example` for complete list and `src/config.py` for all configuration options.
 
 ---
 
@@ -245,7 +303,7 @@ See `src/config.py` for complete configuration options.
    - **Secondary**: CSV ingestion from various datasets (optional, disabled by default)
    - Async document processing with metadata enrichment
    - PostgreSQL/pgvector storage with 1536-dimension embeddings
-   
+
 2. **Retrieval Architecture**:
    - **Factory Pattern**: `create_retrievers()` provides unified interface
    - **Async-First Design**: All operations use `asyncio` and `PGEngine` connection pooling
@@ -257,7 +315,7 @@ See `src/config.py` for complete configuration options.
      - Multi-Query (LLM-generated query variations)
      - Ensemble (Reciprocal Rank Fusion with equal weights)
 
-3. **Complete 3-Stage Evaluation Pipeline**: 
+3. **Complete 3-Stage Evaluation Pipeline**:
    - **Stage 1**: Infrastructure setup and manual strategy comparison
    - **Stage 2**: RAGAS golden test set generation with LLM wrappers
    - **Stage 3**: Automated evaluation with Phoenix experiment framework
@@ -319,105 +377,37 @@ See `src/config.py` for complete configuration options.
 - **Chain Composition**: Standardized RAG chains for fair comparison
 - **Error Handling**: Graceful degradation with structured logging
 
-### Configuration Management
+### Development Tools & Code Quality
 
-**Centralized Configuration** (`src/config.py`):
-All configuration is centralized with environment variable overrides:
+The project uses **Ruff** for linting and formatting (replaces black, flake8, and isort).
 
-```python
-from src.config import (
-    # Phoenix settings
-    PHOENIX_ENDPOINT,           # http://localhost:6006
-    PHOENIX_OTLP_ENDPOINT,      # http://localhost:4317
-
-    # Database settings
-    get_postgres_async_url(),   # PostgreSQL async connection
-    get_postgres_sync_url(),    # PostgreSQL sync connection
-    BASELINE_TABLE,             # mixed_baseline_documents
-    SEMANTIC_TABLE,             # mixed_semantic_documents
-
-    # Model settings (ENFORCED)
-    LLM_MODEL,                  # gpt-4.1-mini (only permitted model)
-    EMBEDDING_MODEL,            # text-embedding-3-small (only permitted model)
-
-    # Dataset settings
-    GOLDEN_TESTSET_NAME,        # mixed_golden_testset_phoenix
-    GOLDEN_TESTSET_SIZE,        # Default: 10
-
-    # Dataclasses for structured config
-    PhoenixSettings,
-    DatabaseSettings,
-    ModelSettings,
-)
-```
-
-**Environment Variables** (`.env` file):
-Required:
-- `OPENAI_API_KEY`: OpenAI API key for embeddings and LLM
-- `COHERE_API_KEY`: Cohere API key for reranking
-
-Optional (with defaults):
-- `PHOENIX_ENDPOINT`: Phoenix UI endpoint (default: http://localhost:6006)
-- `PHOENIX_OTLP_ENDPOINT`: OTLP collector (default: http://localhost:4317)
-- `POSTGRES_HOST`: Database host (default: localhost)
-- `POSTGRES_PORT`: Database port (default: 6024)
-- `GOLDEN_TESTSET_SIZE`: Testset size (default: 10)
-
-See `.env.example` for complete list and configuration options.
-
-### Development Tools & Code Quality (2025 Best Practices)
-
-The project uses modern Python development practices with **Ruff** for linting and formatting, and includes development dependencies via UV's dependency groups.
-
-#### ✅ **Validated Development Dependencies**
 ```bash
-# Add development tools (tested and working)
-uv add --dev ruff mypy pytest pre-commit
-
-# Dependencies are stored in pyproject.toml under [dependency-groups]
-# Current dev dependencies: ruff>=0.12.1, mypy>=1.16.1, pytest>=8.4.1
-```
-
-#### ✅ **Tested Code Quality Commands**
-```bash
-# Lint and check code (tested working)
+# Lint and check code
 ruff check src/ validation/ claude_code_scripts/
 
-# Format code (tested working)
+# Format code
 ruff format src/ validation/ claude_code_scripts/
 
-# Fix auto-fixable issues (tested working)
+# Fix auto-fixable issues
 ruff check --fix src/ validation/ claude_code_scripts/
 
-# Type checking (tested working)
-mypy --version  # Confirms mypy 1.16.1 available
+# Type checking with mypy
+mypy src/
 
 # Check for issues without fixing
 ruff check src/ --no-fix
 ```
 
-#### 🔧 **Optional pyproject.toml Configuration**
-Add tool configurations as needed:
-```toml
-[tool.ruff]
-line-length = 88
-target-version = "py313"
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP"]
-
-[tool.mypy]
-python_version = "3.13"
-warn_return_any = true
-warn_unused_configs = true
-```
-
-**Note**: All commands above have been tested and verified working in this environment. Ruff successfully replaces black, flake8, and isort as a unified tool.
+Configuration is in `pyproject.toml`:
+- Line length: 88 characters
+- Target: Python 3.13
+- Selected rules: E, F, I, N, W, UP
+- Development dependencies: ruff>=0.12.1, mypy>=1.16.1, pytest>=8.4.1
 
 ### Quick Validation Commands
 
 ```bash
-# Verify the complete system works (tested July 2025)
+# Verify the complete system works
 python claude_code_scripts/run_rag_evaluation_pipeline.py --skip-services --testset-size 3
 
 # Run individual validation scripts
@@ -523,7 +513,6 @@ export PHOENIX_UI_PORT=6007
 export PHOENIX_OTLP_PORT=4318
 ```
 
-
 #### Async Event Loop Errors
 - Common in Jupyter notebooks - use `asyncio.run()` for standalone scripts
 - Ensure proper async context management with `PGEngine`
@@ -571,11 +560,11 @@ scripts/
 ```
 flows/
 └── golden_testset_flow.py              # Main Prefect 3.x hybrid flow
+```
 
 **Archived Flows** (see `docs/archived_flows/`):
 - golden_testset_flow_alternate.py (clean reference)
 - golden_testset_flow_prefect3.py (Prefect 3.x reference)
-```
 
 **Validation** (`validation/`):
 ```
@@ -672,7 +661,7 @@ python scripts/db/dry_run_sql.py --sql "SELECT get_latest_testset_version('basel
    def create_retrievers(baseline_vectorstore, semantic_vectorstore, all_docs, llm):
        # Add your new retriever
        custom_retriever = YourCustomRetriever(...)
-       
+
        return {
            "existing_strategies": ...,
            "your_strategy": custom_retriever
@@ -800,7 +789,7 @@ golden_testset_size: int = 10  # Number of examples in RAGAS golden test set
 
 **To switch data sources**:
 - For PDF-only processing (current): `load_pdfs=True, load_csvs=False`
-- For CSV-only processing: `load_pdfs=False, load_csvs=True`  
+- For CSV-only processing: `load_pdfs=False, load_csvs=True`
 - For mixed processing: `load_pdfs=True, load_csvs=True`
 
 **To configure golden test set size**:
