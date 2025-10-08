@@ -25,6 +25,19 @@ from langchain_cohere import CohereRerank
 from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain.retrievers import EnsembleRetriever
 
+# Import shared configuration
+from config import (
+    PHOENIX_ENDPOINT,
+    LLM_MODEL,
+    EMBEDDING_MODEL,
+    COHERE_RERANK_MODEL,
+    get_postgres_async_url,
+    BASELINE_TABLE,
+    SEMANTIC_TABLE,
+    VECTOR_SIZE,
+    GOLDEN_TESTSET_SIZE,
+)
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -44,39 +57,24 @@ Context: {context}""")
 
 @dataclass
 class Config:
-    """Centralized configuration management"""
+    """E2E Pipeline-specific configuration (data loading settings)
+
+    Note: Database, Phoenix, and model settings now come from shared config.py
+    This class only contains settings specific to the E2E pipeline execution.
+    """
     # API Keys
     openai_api_key: str
     cohere_api_key: str
-    
-    # Phoenix settings
-    phoenix_endpoint: str = "http://localhost:6006"
+
+    # Phoenix project naming (timestamped for E2E runs)
     project_name: str = f"retrieval-evaluation-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    
-    # Database settings
-    postgres_user: str = "langchain"
-    postgres_password: str = "langchain"
-    postgres_host: str = "localhost"
-    postgres_port: str = "6024"
-    postgres_db: str = "langchain"
-    vector_size: int = 1536
-    table_baseline: str = "mixed_baseline_documents"
-    table_semantic: str = "mixed_semantic_documents"
-    overwrite_existing_tables: bool = True
-    
-    # Model settings
-    model_name: str = "gpt-4.1-mini"
-    # model_name: str = "gpt-5-nano"
-    embedding_model: str = "text-embedding-3-small"
-    
-    # Data settings
+
+    # Data settings (E2E-specific)
     data_urls: List[tuple] = None
     load_pdfs: bool = True  # Flag to enable/disable PDF loading
     load_csvs: bool = False  # Flag to enable/disable CSV loading (disabled for PDF-only processing)
-    
-    # Golden test set settings
-    golden_testset_size: int = 10  # Number of examples to generate in RAGAS golden test set
-    
+    overwrite_existing_tables: bool = True
+
     def __post_init__(self):
         if self.data_urls is None:
             self.data_urls = [
@@ -103,7 +101,7 @@ def setup_environment() -> Config:
     # Set environment variables
     os.environ["OPENAI_API_KEY"] = config.openai_api_key
     os.environ["COHERE_API_KEY"] = config.cohere_api_key
-    os.environ["PHOENIX_COLLECTOR_ENDPOINT"] = config.phoenix_endpoint
+    os.environ["PHOENIX_COLLECTOR_ENDPOINT"] = PHOENIX_ENDPOINT
     
     return config
 
@@ -123,7 +121,7 @@ async def setup_vector_store(config: Config, table_name: str, embeddings) -> PGV
     
     await pg_engine.ainit_vectorstore_table(
         table_name=table_name,
-        vector_size=config.vector_size,
+        vector_size=VECTOR_SIZE,
         overwrite_existing=config.overwrite_existing_tables,
     )
     
@@ -301,11 +299,11 @@ async def main():
         setup_phoenix_tracing(config)
 
         logger.info(f"✅ Phoenix tracing configured for project: {config.project_name}")
-        logger.info(f"📁 Table names: baseline='{config.table_baseline}', semantic='{config.table_semantic}'")
+        logger.info(f"📁 Table names: baseline='{BASELINE_TABLE}', semantic='{SEMANTIC_TABLE}'")
         
         # Initialize models
-        llm = ChatOpenAI(model=config.model_name)
-        embeddings = OpenAIEmbeddings(model=config.embedding_model)
+        llm = ChatOpenAI(model=LLM_MODEL)
+        embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
         
         # Load data
         logger.info("📥 Loading and processing documents from CSV and PDF sources...")
@@ -316,8 +314,8 @@ async def main():
         
         # Setup vector stores
         logger.info("🔧 Setting up vector stores...")
-        baseline_vectorstore = await setup_vector_store(config, config.table_baseline, embeddings)
-        semantic_vectorstore = await setup_vector_store(config, config.table_semantic, embeddings)
+        baseline_vectorstore = await setup_vector_store(config, BASELINE_TABLE, embeddings)
+        semantic_vectorstore = await setup_vector_store(config, SEMANTIC_TABLE, embeddings)
         
         # Ingest data
         logger.info("📊 Ingesting documents...")
@@ -359,7 +357,7 @@ async def main():
         for method, response in results.items():
             logger.info(f"\n{method:15} {response}")
         
-        logger.info(f"\n✅ Evaluation complete! View traces at: {config.phoenix_endpoint}")
+        logger.info(f"\n✅ Evaluation complete! View traces at: {PHOENIX_ENDPOINT}")
         
     except Exception as e:
         logger.error(f"❌ Error during execution: {e}")
