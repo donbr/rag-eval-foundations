@@ -8,14 +8,13 @@ This module provides functionality to:
 """
 
 import asyncio
+import io
 import json
 import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional
-from decimal import Decimal
-import io
+from typing import Any
 
 import aiohttp
 import pandas as pd
@@ -89,7 +88,9 @@ class PhoenixIntegration:
             self.phoenix_client = px.Client(endpoint=self.config.endpoint)
             logger.info(f"Phoenix client initialized: {self.config.endpoint}")
         except Exception as e:
-            logger.warning(f"Failed to initialize Phoenix client: {e}. Will use HTTP fallback.")
+            logger.warning(
+                f"Failed to initialize Phoenix client: {e}. Will use HTTP fallback."
+            )
             self.phoenix_client = None
 
     def _setup_tracing(self):
@@ -235,7 +236,7 @@ class PhoenixIntegration:
                 "created_at": result["upload_timestamp"],
                 "num_examples": len(dataset),
                 "phoenix_url": result.get("dataset_url", ""),
-                "status": "success"
+                "status": "success",
             }
 
         except Exception as e:
@@ -261,7 +262,6 @@ class PhoenixIntegration:
         if not isinstance(dataset, list):
             return False, "Dataset must be a list of examples"
 
-        required_fields = {"input", "reference"}
         for i, example in enumerate(dataset):
             if not isinstance(example, dict):
                 return False, f"Example {i} is not a dictionary"
@@ -271,7 +271,10 @@ class PhoenixIntegration:
             has_new_format = "input" in example or "reference" in example
 
             if not (has_old_format or has_new_format):
-                return False, f"Example {i} missing required fields (input/reference or question/ground_truth)"
+                return (
+                    False,
+                    f"Example {i} missing required fields (input/reference or question/ground_truth)",
+                )
 
             # Validate non-empty values
             input_val = example.get("input") or example.get("question")
@@ -286,7 +289,9 @@ class PhoenixIntegration:
         logger.info(f"✅ Dataset validation passed: {len(dataset)} examples")
         return True, ""
 
-    def _prepare_external_phoenix_dataset(self, testset_data: dict[str, Any]) -> list[dict[str, Any]]:
+    def _prepare_external_phoenix_dataset(
+        self, testset_data: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Prepare external testset data for Phoenix upload.
 
         Args:
@@ -314,10 +319,16 @@ class PhoenixIntegration:
                 "contexts": example.get("contexts", []),
                 "metadata": {
                     "source": "external_upload",
-                    "synthesizer_name": example.get("metadata", {}).get("synthesizer_name", "unknown"),
-                    "evolution_type": example.get("metadata", {}).get("evolution_type", "simple"),
-                    "generated_at": example.get("metadata", {}).get("generated_at", datetime.utcnow().isoformat()),
-                    **testset_data.get("metadata", {})
+                    "synthesizer_name": example.get("metadata", {}).get(
+                        "synthesizer_name", "unknown"
+                    ),
+                    "evolution_type": example.get("metadata", {}).get(
+                        "evolution_type", "simple"
+                    ),
+                    "generated_at": example.get("metadata", {}).get(
+                        "generated_at", datetime.utcnow().isoformat()
+                    ),
+                    **testset_data.get("metadata", {}),
                 },
             }
 
@@ -413,27 +424,31 @@ class PhoenixIntegration:
             Upload result with dataset ID and URL
         """
         if not self.phoenix_client:
-            raise ValueError("Phoenix client not initialized. Check endpoint configuration.")
+            raise ValueError(
+                "Phoenix client not initialized. Check endpoint configuration."
+            )
 
         upload_timestamp = datetime.utcnow().isoformat()
 
-        logger.info(f"📤 Preparing dataset for Phoenix SDK upload...")
+        logger.info("📤 Preparing dataset for Phoenix SDK upload...")
 
         # Convert to pandas DataFrame (Phoenix SDK expects this format)
         df_data = []
         for example in dataset:
-            df_data.append({
-                "input": example.get("input", ""),
-                "reference": example.get("reference", ""),
-                "metadata": json.dumps(example.get("metadata", {})),
-            })
+            df_data.append(
+                {
+                    "input": example.get("input", ""),
+                    "reference": example.get("reference", ""),
+                    "metadata": json.dumps(example.get("metadata", {})),
+                }
+            )
 
         df = pd.DataFrame(df_data)
         logger.info(f"📊 Created DataFrame with {len(df)} rows")
 
         # Upload using Phoenix SDK
         try:
-            logger.info(f"🚀 Uploading to Phoenix via SDK...")
+            logger.info("🚀 Uploading to Phoenix via SDK...")
             result = self.phoenix_client.upload_dataset(
                 dataset_name=dataset_name,
                 dataframe=df,
@@ -441,7 +456,7 @@ class PhoenixIntegration:
                 output_keys=["reference"],
             )
 
-            dataset_id = result.id if hasattr(result, 'id') else str(result)
+            dataset_id = result.id if hasattr(result, "id") else str(result)
             logger.info(f"✅ Upload successful! Dataset ID: {dataset_id}")
 
             return {
@@ -482,7 +497,9 @@ class PhoenixIntegration:
                 logger.info("Using Phoenix SDK for upload (recommended method)")
                 return await self._upload_to_phoenix_sdk(dataset, dataset_name, version)
             except Exception as e:
-                logger.warning(f"Phoenix SDK upload failed: {e}. Trying HTTP fallback...")
+                logger.warning(
+                    f"Phoenix SDK upload failed: {e}. Trying HTTP fallback..."
+                )
 
         # Fallback to HTTP upload
         return await self._upload_to_phoenix_http(dataset, dataset_name, version)
@@ -502,16 +519,20 @@ class PhoenixIntegration:
         """
         upload_timestamp = datetime.utcnow().isoformat()
 
-        logger.info(f"📤 Preparing multipart upload to /v1/datasets/upload...")
+        logger.info("📤 Preparing multipart upload to /v1/datasets/upload...")
 
         # Convert dataset to JSONL format for upload
         jsonl_data = []
         for example in dataset:
-            jsonl_data.append(json.dumps({
-                "input": example.get("input", ""),
-                "output": example.get("reference", ""),
-                "metadata": example.get("metadata", {}),
-            }))
+            jsonl_data.append(
+                json.dumps(
+                    {
+                        "input": example.get("input", ""),
+                        "output": example.get("reference", ""),
+                        "metadata": example.get("metadata", {}),
+                    }
+                )
+            )
 
         jsonl_content = "\n".join(jsonl_data)
 
@@ -525,14 +546,14 @@ class PhoenixIntegration:
             # Create form data
             form = aiohttp.FormData()
             form.add_field(
-                'file',
-                io.BytesIO(jsonl_content.encode('utf-8')),
+                "file",
+                io.BytesIO(jsonl_content.encode("utf-8")),
                 filename=f"{dataset_name}.jsonl",
-                content_type='application/jsonl'
+                content_type="application/jsonl",
             )
-            form.add_field('dataset_name', dataset_name)
-            form.add_field('input_keys', '["input"]')
-            form.add_field('output_keys', '["output"]')
+            form.add_field("dataset_name", dataset_name)
+            form.add_field("input_keys", '["input"]')
+            form.add_field("output_keys", '["output"]')
 
             logger.info(f"🚀 Uploading {len(dataset)} examples to {url}...")
 
@@ -710,9 +731,13 @@ class PhoenixIntegration:
         }
 
     async def configure_model_pricing(
-        self, model_name: str, name_pattern: str, provider: str,
-        input_cost_per_million: float, output_cost_per_million: float
-    ) -> Dict[str, Any]:
+        self,
+        model_name: str,
+        name_pattern: str,
+        provider: str,
+        input_cost_per_million: float,
+        output_cost_per_million: float,
+    ) -> dict[str, Any]:
         """Configure model pricing in Phoenix.
 
         Args:
@@ -731,7 +756,7 @@ class PhoenixIntegration:
             "provider": provider,
             "input_cost_per_million": input_cost_per_million,
             "output_cost_per_million": output_cost_per_million,
-            "start_date": datetime.utcnow().isoformat()
+            "start_date": datetime.utcnow().isoformat(),
         }
 
         async with aiohttp.ClientSession() as session:
@@ -741,13 +766,19 @@ class PhoenixIntegration:
             async with session.post(url, json=payload, headers=headers) as response:
                 if response.status not in [200, 201]:
                     error_text = await response.text()
-                    raise Exception(f"Failed to configure model pricing: {response.status} - {error_text}")
+                    raise Exception(
+                        f"Failed to configure model pricing: {response.status} - {error_text}"
+                    )
 
                 result = await response.json()
-                logger.info(f"Configured pricing for {model_name}: ${input_cost_per_million}/1M input, ${output_cost_per_million}/1M output")
+                logger.info(
+                    f"Configured pricing for {model_name}: ${input_cost_per_million}/1M input, ${output_cost_per_million}/1M output"
+                )
                 return result
 
-    async def get_trace_costs(self, trace_ids: List[str]) -> Dict[str, Dict[str, float]]:
+    async def get_trace_costs(
+        self, trace_ids: list[str]
+    ) -> dict[str, dict[str, float]]:
         """Get cost summaries for specific traces using GraphQL.
 
         Args:
@@ -769,10 +800,7 @@ class PhoenixIntegration:
         }
         """
 
-        payload = {
-            "query": query,
-            "variables": {"traceIds": trace_ids}
-        }
+        payload = {"query": query, "variables": {"traceIds": trace_ids}}
 
         async with aiohttp.ClientSession() as session:
             url = f"{self.config.endpoint}/graphql"
@@ -781,7 +809,9 @@ class PhoenixIntegration:
             async with session.post(url, json=payload, headers=headers) as response:
                 if response.status != 200:
                     error_text = await response.text()
-                    raise Exception(f"Failed to get trace costs: {response.status} - {error_text}")
+                    raise Exception(
+                        f"Failed to get trace costs: {response.status} - {error_text}"
+                    )
 
                 result = await response.json()
 
@@ -792,12 +822,12 @@ class PhoenixIntegration:
                     costs[trace_id] = {
                         "prompt": float(cost_summary.get("prompt", 0)),
                         "completion": float(cost_summary.get("completion", 0)),
-                        "total": float(cost_summary.get("total", 0))
+                        "total": float(cost_summary.get("total", 0)),
                     }
 
                 return costs
 
-    async def get_session_costs(self, session_id: str) -> Dict[str, Any]:
+    async def get_session_costs(self, session_id: str) -> dict[str, Any]:
         """Get aggregated costs for a session.
 
         Args:
@@ -832,10 +862,7 @@ class PhoenixIntegration:
         }
         """
 
-        payload = {
-            "query": query,
-            "variables": {"sessionId": session_id}
-        }
+        payload = {"query": query, "variables": {"sessionId": session_id}}
 
         async with aiohttp.ClientSession() as session:
             url = f"{self.config.endpoint}/graphql"
@@ -844,7 +871,9 @@ class PhoenixIntegration:
             async with session.post(url, json=payload, headers=headers) as response:
                 if response.status != 200:
                     error_text = await response.text()
-                    raise Exception(f"Failed to get session costs: {response.status} - {error_text}")
+                    raise Exception(
+                        f"Failed to get session costs: {response.status} - {error_text}"
+                    )
 
                 result = await response.json()
 
@@ -875,14 +904,20 @@ class PhoenixIntegration:
                                     "cost": 0.0,
                                     "prompt_tokens": 0,
                                     "completion_tokens": 0,
-                                    "total_tokens": 0
+                                    "total_tokens": 0,
                                 }
 
                             model_breakdown[model_name]["cost"] += trace_cost
                             token_count = llm_attrs.get("tokenCount", {})
-                            model_breakdown[model_name]["prompt_tokens"] += token_count.get("prompt", 0)
-                            model_breakdown[model_name]["completion_tokens"] += token_count.get("completion", 0)
-                            model_breakdown[model_name]["total_tokens"] += token_count.get("total", 0)
+                            model_breakdown[model_name]["prompt_tokens"] += (
+                                token_count.get("prompt", 0)
+                            )
+                            model_breakdown[model_name]["completion_tokens"] += (
+                                token_count.get("completion", 0)
+                            )
+                            model_breakdown[model_name]["total_tokens"] += (
+                                token_count.get("total", 0)
+                            )
 
                 return {
                     "session_id": session_id,
@@ -890,7 +925,7 @@ class PhoenixIntegration:
                     "prompt_cost": total_prompt_cost,
                     "completion_cost": total_completion_cost,
                     "model_breakdown": model_breakdown,
-                    "trace_count": len(traces)
+                    "trace_count": len(traces),
                 }
 
     async def setup_default_model_pricing(self):
@@ -901,22 +936,22 @@ class PhoenixIntegration:
                 "name_pattern": "gpt-4.1-mini",
                 "provider": "openai",
                 "input_cost": 0.15,  # $0.15 per 1M tokens
-                "output_cost": 0.60   # $0.60 per 1M tokens
+                "output_cost": 0.60,  # $0.60 per 1M tokens
             },
             {
                 "model_name": "Text Embedding 3 Small",
                 "name_pattern": "text-embedding-3-small",
                 "provider": "openai",
                 "input_cost": 0.02,  # $0.02 per 1M tokens
-                "output_cost": 0.0   # No output cost for embeddings
+                "output_cost": 0.0,  # No output cost for embeddings
             },
             {
                 "model_name": "Cohere Rerank English v3",
                 "name_pattern": "rerank-english-v3.0",
                 "provider": "cohere",
                 "input_cost": 0.20,  # $0.20 per 1M tokens
-                "output_cost": 0.0   # No output cost for reranking
-            }
+                "output_cost": 0.0,  # No output cost for reranking
+            },
         ]
 
         results = []
@@ -927,12 +962,22 @@ class PhoenixIntegration:
                     name_pattern=model["name_pattern"],
                     provider=model["provider"],
                     input_cost_per_million=model["input_cost"],
-                    output_cost_per_million=model["output_cost"]
+                    output_cost_per_million=model["output_cost"],
                 )
-                results.append({"model": model["model_name"], "status": "success", "result": result})
+                results.append(
+                    {
+                        "model": model["model_name"],
+                        "status": "success",
+                        "result": result,
+                    }
+                )
             except Exception as e:
-                logger.error(f"Failed to configure pricing for {model['model_name']}: {e}")
-                results.append({"model": model["model_name"], "status": "error", "error": str(e)})
+                logger.error(
+                    f"Failed to configure pricing for {model['model_name']}: {e}"
+                )
+                results.append(
+                    {"model": model["model_name"], "status": "error", "error": str(e)}
+                )
 
         return results
 
@@ -952,9 +997,13 @@ async def main():
     parser.add_argument(
         "--dry-run", action="store_true", help="Simulate actions without execution"
     )
-    parser.add_argument("--setup-pricing", action="store_true", help="Configure default model pricing")
+    parser.add_argument(
+        "--setup-pricing", action="store_true", help="Configure default model pricing"
+    )
     parser.add_argument("--get-costs", type=str, help="Get costs for session ID")
-    parser.add_argument("--trace-costs", nargs="+", help="Get costs for specific trace IDs")
+    parser.add_argument(
+        "--trace-costs", nargs="+", help="Get costs for specific trace IDs"
+    )
 
     args = parser.parse_args()
 
