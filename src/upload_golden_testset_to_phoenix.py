@@ -64,12 +64,13 @@ async def upload_existing_golden_testset(
         if has_input and has_reference:
             valid_count += 1
         else:
-            print(
-                f"   ⚠️  Example {i + 1}: Missing {'input' if not has_input else 'reference'}"
-            )
+            missing_field = "input" if not has_input else "reference"
+            print(f"   ⚠️  Example {i + 1}: Missing {missing_field}")
 
+    total = len(golden_testset_records)
     print(
-        f"✅ Validation complete: {valid_count}/{len(golden_testset_records)} examples have required fields"
+        f"✅ Validation complete: {valid_count}/{total} examples "
+        "have required fields"
     )
 
     # Transform to the format expected by PhoenixIntegration
