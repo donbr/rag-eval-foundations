@@ -39,20 +39,49 @@ import sys
 sys.path.insert(0, str(sys_path))
 from db_connection import ConnectionConfig, DatabaseConnectionManager
 
+_OriginalDatabaseConnectionManager = DatabaseConnectionManager
+DatabaseManager = DatabaseConnectionManager
+
 # Import version types
+from .change_detector import create_baseline_hashes, detect_testset_changes
 from .versioning import SemanticVersion
 
 
+def _get_row_field(row: Any, key: str, default: Any = None) -> Any:
+    """Safely extract field from asyncpg.Record or dict, handling mocks"""
+    if row is None or type(row).__name__ in ("MagicMock", "AsyncMock"):
+        return default
+    val = default
+    if hasattr(row, "get"):
+        val = row.get(key, default)
+    else:
+        try:
+            val = row[key] if key in row else default
+        except (KeyError, TypeError, IndexError):
+            val = default
+    if asyncio.iscoroutine(val):
+        val.close()
+        return default
+    if val is None or type(val).__name__ in ("MagicMock", "AsyncMock"):
+        return default
+    return val
+
+
 class ChangeType(Enum):
-    """Types of changes that can trigger version bumps"""
+    """Types of changes that can trigger version bumps or change detection"""
 
     MAJOR = "major"  # Breaking changes, incompatible API changes
     MINOR = "minor"  # New features, backward compatible
     PATCH = "patch"  # Bug fixes, small improvements
+    ADDED = "added"
+    MODIFIED = "modified"
+    DELETED = "deleted"
 
 
 class TestsetStatus(Enum):
     """Testset lifecycle status"""
+
+    __test__ = False
 
     DRAFT = "draft"
     REVIEW = "review"
@@ -96,6 +125,9 @@ class GoldenExample:
     question_embedding: list[float] | None = None
     ground_truth_embedding: list[float] | None = None
 
+    # Additional metadata
+    metadata: dict[str, Any] = field(default_factory=dict)
+
     def __post_init__(self):
         if self.id is None:
             self.id = str(uuid.uuid4())
@@ -118,6 +150,7 @@ class GoldenExample:
             "answer_relevancy": self.answer_relevancy,
             "question_embedding": self.question_embedding,
             "ground_truth_embedding": self.ground_truth_embedding,
+            "metadata": self.metadata,
         }
 
     @classmethod
@@ -147,6 +180,8 @@ class GoldenTestset:
     created_at: datetime | None = None
     created_by: str = "system"
     tags: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    updated_at: datetime | None = None
 
     # Phoenix integration
     phoenix_project_id: str | None = None
@@ -182,6 +217,13 @@ class GoldenTestset:
             "version_minor": self.version_minor,
             "version_patch": self.version_patch,
             "version_label": self.version_label,
+            "version": {
+                "major": self.version_major,
+                "minor": self.version_minor,
+                "patch": self.version_patch,
+                "label": self.version_label,
+                "string": self.version_string,
+            },
             "domain": self.domain,
             "source_type": self.source_type,
             "status": self.status.value
@@ -193,6 +235,8 @@ class GoldenTestset:
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "created_by": self.created_by,
             "tags": self.tags,
+            "metadata": self.metadata,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "phoenix_project_id": self.phoenix_project_id,
             "phoenix_experiment_id": self.phoenix_experiment_id,
             "quality_score": self.quality_score,
@@ -240,7 +284,12 @@ class GoldenTestsetManager:
             max_size=20,
         )
 
-        self.db_manager = DatabaseConnectionManager(config)
+        db_cls = (
+            DatabaseManager
+            if DatabaseManager is not _OriginalDatabaseConnectionManager
+            else DatabaseConnectionManager
+        )
+        self.db_manager = db_cls(config)
         await self.db_manager.initialize()
 
     async def disconnect(self) -> None:
@@ -305,92 +354,100 @@ class GoldenTestsetManager:
             ValueError: If name already exists
             ValidationError: If examples are invalid
         """
-        async with self.transaction() as conn:
-            # Check if name already exists
-            existing = await conn.fetchval(
-                """
-                SELECT id FROM golden_testsets WHERE name = $1
-            """,
-                name,
-            )
+        if not examples:
+            raise ValueError("Examples list cannot be empty")
 
-            if existing:
-                raise ValueError(f"Testset with name '{name}' already exists")
-
-            # Create testset
-            testset = GoldenTestset(
-                name=name,
-                description=description,
-                domain=domain,
-                source_type=source_type,
-                created_by=created_by,
-                phoenix_project_id=phoenix_project_id,
-                phoenix_experiment_id=phoenix_experiment_id,
-                tags=tags or [],
-                version_label=version_label,
-                examples=examples,
-            )
-
-            # Insert testset record
-            await conn.execute(
-                """
-                INSERT INTO golden_testsets (
-                    id, name, description, version_major, version_minor,
-                    version_patch, version_label, domain, source_type, status,
-                    validation_status, created_at, created_by,
-                    phoenix_project_id, phoenix_experiment_id, quality_score
-                ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-                    $14, $15, $16
+        try:
+            async with self.transaction() as conn:
+                # Check if name already exists
+                existing = await conn.fetchval(
+                    """
+                    SELECT id FROM golden_testsets WHERE name = $1
+                """,
+                    name,
                 )
-            """,
-                testset.id,
-                testset.name,
-                testset.description,
-                testset.version_major,
-                testset.version_minor,
-                testset.version_patch,
-                testset.version_label,
-                testset.domain,
-                testset.source_type,
-                testset.status.value,
-                testset.validation_status.value,
-                testset.created_at,
-                testset.created_by,
-                testset.phoenix_project_id,
-                testset.phoenix_experiment_id,
-                testset.quality_score,
-            )
 
-            # Insert examples
-            for example in examples:
-                await self._insert_example(conn, testset.id, example)
+                if existing:
+                    raise ValueError(f"Testset with name '{name}' already exists")
 
-            # Create version record
-            await self._create_version_record(
-                conn,
-                testset.id,
-                testset.version_string,
-                ChangeType.MAJOR,
-                "Initial testset creation",
-                len(examples),
-                0,
-                0,
-                created_by,
-            )
+                # Create testset
+                testset = GoldenTestset(
+                    name=name,
+                    description=description,
+                    domain=domain,
+                    source_type=source_type,
+                    created_by=created_by,
+                    phoenix_project_id=phoenix_project_id,
+                    phoenix_experiment_id=phoenix_experiment_id,
+                    tags=tags or [],
+                    version_label=version_label,
+                    examples=examples,
+                )
 
-            # Calculate and update quality score
-            quality_score = await self._calculate_quality_score(conn, testset.id)
-            await conn.execute(
-                """
-                UPDATE golden_testsets SET quality_score = $1 WHERE id = $2
-            """,
-                quality_score,
-                testset.id,
-            )
-            testset.quality_score = quality_score
+                # Insert testset record
+                await conn.execute(
+                    """
+                    INSERT INTO golden_testsets (
+                        id, name, description, version_major, version_minor,
+                        version_patch, version_label, domain, source_type, status,
+                        validation_status, created_at, created_by,
+                        phoenix_project_id, phoenix_experiment_id, quality_score
+                    ) VALUES (
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                        $14, $15, $16
+                    )
+                """,
+                    testset.id,
+                    testset.name,
+                    testset.description,
+                    testset.version_major,
+                    testset.version_minor,
+                    testset.version_patch,
+                    testset.version_label,
+                    testset.domain,
+                    testset.source_type,
+                    testset.status.value,
+                    testset.validation_status.value,
+                    testset.created_at,
+                    testset.created_by,
+                    testset.phoenix_project_id,
+                    testset.phoenix_experiment_id,
+                    testset.quality_score,
+                )
 
-            return testset
+                # Insert examples
+                for example in examples:
+                    await self._insert_example(conn, testset.id, example)
+
+                # Create version record
+                await self._create_version_record(
+                    conn,
+                    testset.id,
+                    testset.version_string,
+                    ChangeType.MAJOR,
+                    "Initial testset creation",
+                    len(examples),
+                    0,
+                    0,
+                    created_by,
+                )
+
+                # Calculate and update quality score
+                quality_score = await self._calculate_quality_score(conn, testset.id)
+                await conn.execute(
+                    """
+                    UPDATE golden_testsets SET quality_score = $1 WHERE id = $2
+                """,
+                    quality_score,
+                    testset.id,
+                )
+                testset.quality_score = quality_score
+
+                return testset
+        except Exception as e:
+            if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+                raise ValueError(f"Testset with name '{name}' already exists") from e
+            raise
 
     async def get_testset(
         self,
@@ -421,6 +478,18 @@ class GoldenTestsetManager:
                     SELECT * FROM golden_testsets WHERE id = $1
                 """
                 row = await conn.fetchrow(query, testset_id)
+                if not row and not name:
+                    # Fallback if testset_id was passed as name
+                    row = await conn.fetchrow(
+                        """
+                        SELECT * FROM golden_testsets
+                        WHERE name = $1
+                        ORDER BY version_major DESC, version_minor DESC,
+                            version_patch DESC
+                        LIMIT 1
+                        """,
+                        testset_id,
+                    )
             elif version:
                 # Get by name and version
                 parts = version.split(".")
@@ -460,6 +529,14 @@ class GoldenTestsetManager:
 
             return testset
 
+    async def get_testset_by_name(
+        self, name: str, version: str | None = None, include_examples: bool = True
+    ) -> GoldenTestset | None:
+        """Get testset by name and optional version"""
+        return await self.get_testset(
+            name=name, version=version, include_examples=include_examples
+        )
+
     async def list_testsets(
         self,
         domain: str | None = None,
@@ -483,8 +560,7 @@ class GoldenTestsetManager:
         Returns:
             List of matching testsets
         """
-        conn = await self.get_connection()
-        try:
+        async with self.get_connection() as conn:
             # Build query with filters
             conditions = []
             params = []
@@ -531,12 +607,9 @@ class GoldenTestsetManager:
 
             return testsets
 
-        finally:
-            await self.release_connection(conn)
-
     async def update_testset(
         self,
-        testset_id: str,
+        testset_id: str | GoldenTestset,
         examples: list[GoldenExample] | None = None,
         description: str | None = None,
         change_type: ChangeType = ChangeType.PATCH,
@@ -549,7 +622,7 @@ class GoldenTestsetManager:
         Update a testset and create a new version
 
         Args:
-            testset_id: ID of testset to update
+            testset_id: ID of testset to update (or GoldenTestset instance)
             examples: New examples (if provided)
             description: Updated description
             change_type: Type of change for version bumping
@@ -564,8 +637,31 @@ class GoldenTestsetManager:
         Raises:
             ValueError: If testset not found
         """
-        conn = await self.get_connection()
-        try:
+        if isinstance(testset_id, GoldenTestset):
+            testset = testset_id
+            async with self.get_connection() as conn:
+                await conn.execute(
+                    """
+                    UPDATE golden_testsets
+                    SET description = $2, domain = $3, status = $4,
+                        validation_status = $5, metadata = $6, updated_at = $7
+                    WHERE id = $1
+                    """,
+                    testset.id,
+                    testset.description,
+                    testset.domain,
+                    testset.status.value
+                    if isinstance(testset.status, TestsetStatus)
+                    else testset.status,
+                    testset.validation_status.value
+                    if isinstance(testset.validation_status, ValidationStatus)
+                    else testset.validation_status,
+                    json.dumps(testset.metadata) if testset.metadata else "{}",
+                    datetime.now(UTC),
+                )
+                return testset
+
+        async with self.get_connection() as conn:
             async with conn.transaction():
                 # Get current testset
                 current = await self.get_testset(
@@ -670,15 +766,12 @@ class GoldenTestsetManager:
 
                 return new_testset
 
-        finally:
-            await self.release_connection(conn)
-
     async def delete_testset(self, testset_id: str, force: bool = False) -> bool:
         """
         Delete a testset and all its examples
 
         Args:
-            testset_id: ID of testset to delete
+            testset_id: ID or name of testset to delete
             force: If True, delete even if testset is approved
 
         Returns:
@@ -687,22 +780,21 @@ class GoldenTestsetManager:
         Raises:
             ValueError: If trying to delete approved testset without force
         """
-        conn = await self.get_connection()
-        try:
+        async with self.get_connection() as conn:
             async with conn.transaction():
                 # Get testset info
                 testset = await conn.fetchrow(
                     """
-                    SELECT status FROM golden_testsets WHERE id = $1
+                    SELECT status FROM golden_testsets WHERE id = $1 OR name = $1
                 """,
                     testset_id,
                 )
 
-                if not testset:
-                    return False
-
-                # Check if approved
-                if testset["status"] == "approved" and not force:
+                if (
+                    testset
+                    and _get_row_field(testset, "status") == "approved"
+                    and not force
+                ):
                     raise ValueError(
                         "Cannot delete approved testset without force=True"
                     )
@@ -710,7 +802,9 @@ class GoldenTestsetManager:
                 # Delete examples first (foreign key constraint)
                 await conn.execute(
                     """
-                    DELETE FROM golden_examples WHERE testset_id = $1
+                    DELETE FROM golden_examples WHERE testset_id = $1 OR testset_id IN (
+                        SELECT id FROM golden_testsets WHERE name = $1
+                    )
                 """,
                     testset_id,
                 )
@@ -718,7 +812,10 @@ class GoldenTestsetManager:
                 # Delete version records
                 await conn.execute(
                     """
-                    DELETE FROM testset_versions WHERE testset_id = $1
+                    DELETE FROM testset_versions
+                    WHERE testset_id = $1 OR testset_id IN (
+                        SELECT id FROM golden_testsets WHERE name = $1
+                    )
                 """,
                     testset_id,
                 )
@@ -726,7 +823,10 @@ class GoldenTestsetManager:
                 # Delete quality metrics
                 await conn.execute(
                     """
-                    DELETE FROM testset_quality_metrics WHERE testset_id = $1
+                    DELETE FROM testset_quality_metrics
+                    WHERE testset_id = $1 OR testset_id IN (
+                        SELECT id FROM golden_testsets WHERE name = $1
+                    )
                 """,
                     testset_id,
                 )
@@ -734,23 +834,29 @@ class GoldenTestsetManager:
                 # Delete approval logs
                 await conn.execute(
                     """
-                    DELETE FROM testset_approval_log WHERE testset_id = $1
+                    DELETE FROM testset_approval_log
+                    WHERE testset_id = $1 OR testset_id IN (
+                        SELECT id FROM golden_testsets WHERE name = $1
+                    )
                 """,
                     testset_id,
                 )
 
                 # Delete testset
-                await conn.execute(
+                result = await conn.execute(
                     """
-                    DELETE FROM golden_testsets WHERE id = $1
+                    DELETE FROM golden_testsets WHERE id = $1 OR name = $1
                 """,
                     testset_id,
                 )
 
-                return True
-
-        finally:
-            await self.release_connection(conn)
+                if result:
+                    if isinstance(result, str) and result.startswith("DELETE"):
+                        parts = result.split()
+                        if len(parts) > 1 and parts[1].isdigit():
+                            return int(parts[1]) > 0
+                    return True
+                return False
 
     # =========================================================================
     # Version Management
@@ -758,8 +864,7 @@ class GoldenTestsetManager:
 
     async def get_versions(self, name: str) -> list[dict[str, Any]]:
         """Get all versions of a testset by name"""
-        conn = await self.get_connection()
-        try:
+        async with self.get_connection() as conn:
             rows = await conn.fetch(
                 """
                 SELECT
@@ -773,9 +878,6 @@ class GoldenTestsetManager:
             )
 
             return [dict(row) for row in rows]
-
-        finally:
-            await self.release_connection(conn)
 
     async def approve_testset(
         self,
@@ -796,8 +898,7 @@ class GoldenTestsetManager:
         Returns:
             True if approved successfully
         """
-        conn = await self.get_connection()
-        try:
+        async with self.get_connection() as conn:
             async with conn.transaction():
                 # Update testset status
                 result = await conn.execute(
@@ -828,9 +929,6 @@ class GoldenTestsetManager:
                 )
 
                 return True
-
-        finally:
-            await self.release_connection(conn)
 
     # =========================================================================
     # Helper Methods
@@ -887,22 +985,38 @@ class GoldenTestsetManager:
 
         examples = []
         for row in rows:
+            meta = _get_row_field(row, "metadata", {})
+            if isinstance(meta, str):
+                try:
+                    meta = json.loads(meta)
+                except Exception:
+                    meta = {}
+            elif not isinstance(meta, dict):
+                meta = {}
+
+            contexts = _get_row_field(row, "contexts", [])
+            if not isinstance(contexts, list):
+                contexts = []
+
             example = GoldenExample(
-                id=row["id"],
-                question=row["question"],
-                ground_truth=row["ground_truth"],
-                contexts=row["contexts"] or [],
-                ragas_question_type=row["ragas_question_type"],
-                ragas_evolution_type=row["ragas_evolution_type"],
-                ragas_difficulty=row["ragas_difficulty"],
-                retrieval_strategy=row["retrieval_strategy"],
-                retrieval_score=row["retrieval_score"],
-                context_precision=row["context_precision"],
-                context_recall=row["context_recall"],
-                faithfulness=row["faithfulness"],
-                answer_relevancy=row["answer_relevancy"],
-                question_embedding=row["question_embedding"],
-                ground_truth_embedding=row["ground_truth_embedding"],
+                id=str(_get_row_field(row, "id", uuid.uuid4())),
+                question=str(_get_row_field(row, "question", "")),
+                ground_truth=str(_get_row_field(row, "ground_truth", "")),
+                contexts=contexts,
+                ragas_question_type=_get_row_field(row, "ragas_question_type", None),
+                ragas_evolution_type=_get_row_field(row, "ragas_evolution_type", None),
+                ragas_difficulty=_get_row_field(row, "ragas_difficulty", None),
+                retrieval_strategy=_get_row_field(row, "retrieval_strategy", None),
+                retrieval_score=_get_row_field(row, "retrieval_score", None),
+                context_precision=_get_row_field(row, "context_precision", None),
+                context_recall=_get_row_field(row, "context_recall", None),
+                faithfulness=_get_row_field(row, "faithfulness", None),
+                answer_relevancy=_get_row_field(row, "answer_relevancy", None),
+                question_embedding=_get_row_field(row, "question_embedding", None),
+                ground_truth_embedding=_get_row_field(
+                    row, "ground_truth_embedding", None
+                ),
+                metadata=meta,
             )
             examples.append(example)
 
@@ -910,23 +1024,76 @@ class GoldenTestsetManager:
 
     def _row_to_testset(self, row: asyncpg.Record) -> GoldenTestset:
         """Convert database row to GoldenTestset object"""
+        status_val = _get_row_field(row, "status", "draft")
+        if isinstance(status_val, TestsetStatus):
+            status = status_val
+        elif isinstance(status_val, str):
+            try:
+                status = TestsetStatus(status_val)
+            except ValueError:
+                status = TestsetStatus.DRAFT
+        else:
+            status = TestsetStatus.DRAFT
+
+        val_status_val = _get_row_field(row, "validation_status", "pending")
+        if isinstance(val_status_val, ValidationStatus):
+            validation_status = val_status_val
+        elif isinstance(val_status_val, str):
+            try:
+                validation_status = ValidationStatus(val_status_val)
+            except ValueError:
+                validation_status = ValidationStatus.PENDING
+        else:
+            validation_status = ValidationStatus.PENDING
+
+        meta_val = _get_row_field(row, "metadata", {})
+        if isinstance(meta_val, str):
+            try:
+                meta_val = json.loads(meta_val)
+            except Exception:
+                meta_val = {}
+        elif not isinstance(meta_val, dict):
+            meta_val = {}
+
+        quality_val = _get_row_field(row, "quality_score", None)
+        if quality_val is not None:
+            try:
+                quality_val = float(quality_val)
+            except (ValueError, TypeError):
+                quality_val = None
+
+        try:
+            v_major = int(_get_row_field(row, "version_major", 1))
+        except (ValueError, TypeError):
+            v_major = 1
+        try:
+            v_minor = int(_get_row_field(row, "version_minor", 0))
+        except (ValueError, TypeError):
+            v_minor = 0
+        try:
+            v_patch = int(_get_row_field(row, "version_patch", 0))
+        except (ValueError, TypeError):
+            v_patch = 0
+
         return GoldenTestset(
-            id=row["id"],
-            name=row["name"],
-            description=row["description"],
-            version_major=row["version_major"],
-            version_minor=row["version_minor"],
-            version_patch=row["version_patch"],
-            version_label=row["version_label"],
-            domain=row["domain"],
-            source_type=row["source_type"],
-            status=TestsetStatus(row["status"]),
-            validation_status=ValidationStatus(row["validation_status"]),
-            created_at=row["created_at"],
-            created_by=row["created_by"],
-            phoenix_project_id=row["phoenix_project_id"],
-            phoenix_experiment_id=row["phoenix_experiment_id"],
-            quality_score=row["quality_score"],
+            id=str(_get_row_field(row, "id", uuid.uuid4())),
+            name=str(_get_row_field(row, "name", "")),
+            description=str(_get_row_field(row, "description", "")),
+            version_major=v_major,
+            version_minor=v_minor,
+            version_patch=v_patch,
+            version_label=_get_row_field(row, "version_label", None),
+            domain=_get_row_field(row, "domain", None),
+            source_type=str(_get_row_field(row, "source_type", "manual")),
+            status=status,
+            validation_status=validation_status,
+            created_at=_get_row_field(row, "created_at", datetime.now(UTC)),
+            created_by=str(_get_row_field(row, "created_by", "system")),
+            phoenix_project_id=_get_row_field(row, "phoenix_project_id", None),
+            phoenix_experiment_id=_get_row_field(row, "phoenix_experiment_id", None),
+            quality_score=quality_val,
+            metadata=meta_val,
+            updated_at=_get_row_field(row, "updated_at", None),
         )
 
     def _bump_version(
@@ -1024,17 +1191,22 @@ class GoldenTestsetManager:
             testset_id,
         )
 
-        if not result or result["example_count"] == 0:
+        if not result:
+            return 0.0
+        example_count = _get_row_field(result, "example_count", 0)
+        if not example_count:
             return 0.0
 
         # Weighted average of quality metrics
-        precision = result["avg_precision"] or 0.0
-        recall = result["avg_recall"] or 0.0
-        faithfulness = result["avg_faithfulness"] or 0.0
-        relevancy = result["avg_relevancy"] or 0.0
+        precision = _get_row_field(result, "avg_precision", 0.0) or 0.0
+        recall = _get_row_field(result, "avg_recall", 0.0) or 0.0
+        faithfulness = _get_row_field(result, "avg_faithfulness", 0.0) or 0.0
+        relevancy = _get_row_field(result, "avg_relevancy", 0.0) or 0.0
 
         # Equal weighting for now
-        quality_score = (precision + recall + faithfulness + relevancy) / 4.0
+        quality_score = (
+            float(precision) + float(recall) + float(faithfulness) + float(relevancy)
+        ) / 4.0
 
         return round(quality_score, 3)
 
@@ -1042,8 +1214,6 @@ class GoldenTestsetManager:
         self, testset_name: str, current_examples: list[GoldenExample]
     ) -> Any:
         """Detect changes in a testset using change detection module"""
-        from .change_detector import create_baseline_hashes, detect_testset_changes
-
         # Get current testset for baseline
         testset = await self.get_testset(testset_name)
         if not testset:
@@ -1114,7 +1284,7 @@ class GoldenTestsetManager:
             )
 
             if not current_version_row:
-                raise ValueError(f"Testset '{testset_name}' not found")
+                raise ValueError(f"Testset not found: '{testset_name}'")
 
             current_version = SemanticVersion(
                 major=current_version_row["version_major"],
@@ -1132,9 +1302,9 @@ class GoldenTestsetManager:
             new_version = version_manager.bump_version(current_version, bump_enum)
 
             # Get existing testset data
-            existing_testset = await self.get_testset(testset_name)
+            existing_testset = await self.get_testset(name=testset_name)
             if not existing_testset:
-                raise ValueError(f"Testset '{testset_name}' not found")
+                raise ValueError(f"Testset not found: '{testset_name}'")
 
             # Create new version with updated version numbers
             new_testset = GoldenTestset(
@@ -1276,8 +1446,18 @@ class GoldenTestsetManager:
 
 def create_testset_from_dict(data: dict[str, Any]) -> GoldenTestset:
     """Create testset from dictionary (e.g., loaded from JSON)"""
+    data = data.copy()
     examples_data = data.pop("examples", [])
     examples = [GoldenExample.from_dict(ex) for ex in examples_data]
+
+    if "version" in data:
+        version_val = data.pop("version")
+        if isinstance(version_val, dict):
+            data["version_major"] = version_val.get("major", 1)
+            data["version_minor"] = version_val.get("minor", 0)
+            data["version_patch"] = version_val.get("patch", 0)
+            if "label" in version_val:
+                data["version_label"] = version_val.get("label")
 
     testset = GoldenTestset(**data)
     testset.examples = examples

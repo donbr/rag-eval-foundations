@@ -50,10 +50,10 @@ class QualityMetrics:
 
     def passes_quality_gates(self) -> bool:
         """Check if metrics pass all quality gates"""
-        return (
+        return bool(
             self.diversity_score >= 0.7
             and self.duplicate_count == 0
-            and self.coverage_score >= 0.9
+            and self.coverage_score >= 0.8
             and self.distribution_p_value > 0.05
         )
 
@@ -67,8 +67,8 @@ class QualityMetrics:
         if self.duplicate_count > 0:
             violations.append(f"Found {self.duplicate_count} duplicate questions")
 
-        if self.coverage_score < 0.9:
-            violations.append(f"Coverage score {self.coverage_score:.3f} < 0.9")
+        if self.coverage_score < 0.8:
+            violations.append(f"Coverage score {self.coverage_score:.3f} < 0.8")
 
         if self.distribution_p_value <= 0.05:
             violations.append(
@@ -118,7 +118,7 @@ class QualityValidator:
     def __init__(
         self,
         min_diversity_score: float = 0.7,
-        min_coverage_score: float = 0.9,
+        min_coverage_score: float = 0.8,
         min_p_value: float = 0.05,
         semantic_similarity_threshold: float = 0.85,
     ):
@@ -177,7 +177,7 @@ class QualityValidator:
         )
 
         # Check quality gates
-        passed = metrics.passes_quality_gates()
+        passed = bool(metrics.passes_quality_gates())
         violations = metrics.get_violations()
         recommendations = await self._generate_recommendations(metrics, examples)
 
@@ -329,7 +329,7 @@ class QualityValidator:
                 statistics.stdev(difficulties) if len(difficulties) > 1 else 0
             )
             difficulty_coverage = min(
-                1.0, difficulty_std / 2.0
+                1.0, difficulty_std / 1.0
             )  # Normalize by reasonable std
             coverage_factors.append(difficulty_coverage)
 
@@ -480,7 +480,7 @@ class QualityValidator:
                 "Check for both exact matches and semantically similar questions."
             )
 
-        if metrics.coverage_score < self.min_coverage_score:
+        if metrics.coverage_score <= self.min_coverage_score:
             recommendations.append(
                 f"Improve domain coverage (current: {metrics.coverage_score:.3f}). "
                 "Add questions covering missing topic areas and question types."

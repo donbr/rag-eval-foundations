@@ -9,140 +9,136 @@ from datetime import UTC, datetime
 
 import pytest
 
-from src.golden_testset.manager import GoldenExample, GoldenTestset
-from src.golden_testset.quality_validator import (
+from golden_testset.manager import GoldenExample, GoldenTestset
+from golden_testset.quality_validator import (
     QualityMetrics,
     QualityValidator,
     ValidationResult,
 )
 
 
+@pytest.fixture
+def validator():
+    """Create a QualityValidator instance"""
+    return QualityValidator()
+
+
+@pytest.fixture
+def diverse_examples():
+    """Create diverse examples that should pass quality gates"""
+    return [
+        GoldenExample(
+            question="What factors influence user trust in AI systems?",
+            ground_truth=("User trust in AI systems is influenced by transparency."),
+            contexts=[
+                "Trust research shows multiple factors affect "
+                "user confidence in AI systems."
+            ],
+            ragas_difficulty=1.0,
+        ),
+        GoldenExample(
+            question="How do people adapt their interaction patterns with LLMs?",
+            ground_truth=(
+                "People adapt by learning effective prompting strategies, "
+                "adjusting their expectations, developing verification habits, "
+                "and building evaluation mental models."
+            ),
+            contexts=[
+                "Human-AI interaction patterns evolve through experience and learning."
+            ],
+            ragas_difficulty=2.0,
+        ),
+        GoldenExample(
+            question="Why do users sometimes reject correct AI advice?",
+            ground_truth="Users may reject correct advice due to algorithmic aversion.",
+            contexts=[
+                "Algorithmic aversion describes user tendency to avoid "
+                "AI recommendations."
+            ],
+            ragas_difficulty=3.0,
+        ),
+        GoldenExample(
+            question="Compare human-AI collaboration versus human-human teams?",
+            ground_truth=(
+                "Human-AI collaboration differs from human-human collaboration "
+                "in communication speed, cognitive models, and "
+                "explainability requirements."
+            ),
+            contexts=[
+                "Collaboration between humans and AI faces several "
+                "documented challenges."
+            ],
+            ragas_difficulty=4.0,
+        ),
+        GoldenExample(
+            question="List the key challenges documented in human-AI interaction?",
+            ground_truth=(
+                "Key challenges include calibrating trust, managing overreliance, "
+                "handling errors gracefully, maintaining human agency, "
+                "ensuring privacy, evaluating model alignment, and mitigating "
+                "behavioral bias across workflows."
+            ),
+            contexts=[
+                "Uncertainty communication is crucial for appropriate "
+                "reliance on AI systems."
+            ],
+            ragas_difficulty=5.0,
+        ),
+    ]
+
+
+@pytest.fixture
+def duplicate_examples():
+    """Create examples with duplicates that should fail quality gates"""
+    return [
+        GoldenExample(
+            question="What is machine learning?",
+            ground_truth=(
+                "Machine learning is a subset of AI that enables "
+                "computers to learn without explicit programming."
+            ),
+            contexts=["ML definition"],
+            ragas_difficulty=1.0,
+        ),
+        GoldenExample(
+            question="What is machine learning?",  # Exact duplicate
+            ground_truth=(
+                "Machine learning is a subset of AI that enables "
+                "computers to learn without explicit programming."
+            ),
+            contexts=["ML definition"],
+            ragas_difficulty=1.0,
+        ),
+        GoldenExample(
+            question="Define machine learning",  # Semantic duplicate
+            ground_truth=(
+                "Machine learning is an AI approach where systems learn from data."
+            ),
+            contexts=["ML definition"],
+            ragas_difficulty=1.0,
+        ),
+    ]
+
+
+@pytest.fixture
+def sample_testset(diverse_examples):
+    """Create a sample testset"""
+    return GoldenTestset(
+        id="test-123",
+        name="llm_interaction_research",
+        description="Test testset for LLM interaction research",
+        examples=diverse_examples,
+        version_major=1,
+        version_minor=0,
+        version_patch=0,
+        created_at=datetime.now(UTC),
+        domain="research",
+        status="active",
+    )
+
+
 class TestQualityValidator:
     """Test suite for QualityValidator"""
-
-    @pytest.fixture
-    def validator(self):
-        """Create a QualityValidator instance"""
-        return QualityValidator()
-
-    @pytest.fixture
-    def diverse_examples(self):
-        """Create diverse examples that should pass quality gates"""
-        return [
-            GoldenExample(
-                question="What factors influence user trust in AI systems?",
-                ground_truth=(
-                    "User trust in AI systems is influenced by "
-                    "transparency, accuracy, consistency, and "
-                    "explainability of the AI's decisions."
-                ),
-                contexts=[
-                    "Trust research shows multiple factors affect "
-                    "user confidence in AI systems."
-                ],
-                ragas_difficulty=2.0,
-            ),
-            GoldenExample(
-                question="How do people adapt their interaction patterns with LLMs?",
-                ground_truth=(
-                    "People adapt by learning effective prompting strategies, "
-                    "adjusting their expectations, and developing "
-                    "verification habits."
-                ),
-                contexts=[
-                    "Human-AI interaction patterns evolve through "
-                    "experience and learning."
-                ],
-                ragas_difficulty=2.5,
-            ),
-            GoldenExample(
-                question="What are the key challenges in human-AI collaboration?",
-                ground_truth=(
-                    "Key challenges include calibrating trust, managing "
-                    "overreliance, handling errors gracefully, and "
-                    "maintaining human agency."
-                ),
-                contexts=[
-                    "Collaboration between humans and AI faces several "
-                    "documented challenges."
-                ],
-                ragas_difficulty=3.0,
-            ),
-            GoldenExample(
-                question="Why do users sometimes reject correct AI advice?",
-                ground_truth=(
-                    "Users may reject correct AI advice due to algorithmic "
-                    "aversion, past negative experiences, or lack of "
-                    "understanding of AI capabilities."
-                ),
-                contexts=[
-                    "Algorithmic aversion describes user tendency to avoid "
-                    "AI recommendations."
-                ],
-                ragas_difficulty=2.2,
-            ),
-            GoldenExample(
-                question="How can AI systems better communicate uncertainty?",
-                ground_truth=(
-                    "AI systems can communicate uncertainty through confidence "
-                    "scores, uncertainty intervals, alternative suggestions, "
-                    "and clear limitation statements."
-                ),
-                contexts=[
-                    "Uncertainty communication is crucial for appropriate "
-                    "reliance on AI systems."
-                ],
-                ragas_difficulty=2.8,
-            ),
-        ]
-
-    @pytest.fixture
-    def duplicate_examples(self):
-        """Create examples with duplicates that should fail quality gates"""
-        return [
-            GoldenExample(
-                question="What is machine learning?",
-                ground_truth=(
-                    "Machine learning is a subset of AI that enables "
-                    "computers to learn without explicit programming."
-                ),
-                contexts=["ML definition"],
-                ragas_difficulty=1.0,
-            ),
-            GoldenExample(
-                question="What is machine learning?",  # Exact duplicate
-                ground_truth=(
-                    "Machine learning is a subset of AI that enables "
-                    "computers to learn without explicit programming."
-                ),
-                contexts=["ML definition"],
-                ragas_difficulty=1.0,
-            ),
-            GoldenExample(
-                question="Define machine learning",  # Semantic duplicate
-                ground_truth=(
-                    "Machine learning is an AI approach where systems learn from data."
-                ),
-                contexts=["ML definition"],
-                ragas_difficulty=1.0,
-            ),
-        ]
-
-    @pytest.fixture
-    def sample_testset(self, diverse_examples):
-        """Create a sample testset"""
-        return GoldenTestset(
-            id="test-123",
-            name="llm_interaction_research",
-            description="Test testset for LLM interaction research",
-            examples=diverse_examples,
-            version_major=1,
-            version_minor=0,
-            version_patch=0,
-            created_at=datetime.now(UTC),
-            domain="research",
-            status="active",
-        )
 
     @pytest.mark.asyncio
     async def test_validate_diverse_testset_passes(self, validator, sample_testset):
@@ -412,7 +408,7 @@ class TestConvenienceFunctions:
     @pytest.mark.asyncio
     async def test_validate_testset_quality(self, sample_testset):
         """Test convenience function for validation"""
-        from src.golden_testset.quality_validator import validate_testset_quality
+        from golden_testset.quality_validator import validate_testset_quality
 
         result = await validate_testset_quality(sample_testset)
         assert isinstance(result, ValidationResult)
@@ -420,7 +416,7 @@ class TestConvenienceFunctions:
     @pytest.mark.asyncio
     async def test_check_quality_gates(self, sample_testset):
         """Test convenience function for quality gates"""
-        from src.golden_testset.quality_validator import check_quality_gates
+        from golden_testset.quality_validator import check_quality_gates
 
         passed = await check_quality_gates(sample_testset)
         assert isinstance(passed, bool)

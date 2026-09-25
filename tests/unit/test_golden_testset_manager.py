@@ -106,12 +106,28 @@ def sample_testset(sample_examples):
 @pytest.fixture
 def mock_db_manager():
     """Mock database manager for testing"""
-    mock = AsyncMock()
+    from unittest.mock import MagicMock
 
-    # Mock connection context manager
+    mock = MagicMock()
     mock_conn = AsyncMock()
-    mock.get_connection.return_value.__aenter__.return_value = mock_conn
-    mock.get_connection.return_value.__aexit__.return_value = None
+
+    conn_ctx = AsyncMock()
+    conn_ctx.__aenter__.return_value = mock_conn
+    conn_ctx.__aexit__.return_value = None
+    mock.get_connection = MagicMock(return_value=conn_ctx)
+
+    tx_ctx = AsyncMock()
+    tx_ctx.__aenter__.return_value = mock_conn
+    tx_ctx.__aexit__.return_value = None
+    mock.transaction = MagicMock(return_value=tx_ctx)
+
+    conn_tx = AsyncMock()
+    conn_tx.__aenter__.return_value = mock_conn
+    conn_tx.__aexit__.return_value = None
+    mock_conn.transaction = MagicMock(return_value=conn_tx)
+
+    mock.initialize = AsyncMock()
+    mock.close = AsyncMock()
 
     return mock, mock_conn
 
@@ -167,7 +183,7 @@ class TestTestsetCRUDOperations:
         mock_db, mock_conn = mock_db_manager
 
         # Mock database responses
-        mock_conn.fetchval.return_value = "test-uuid-123"  # For INSERT
+        mock_conn.fetchval.return_value = None  # No existing testset
         mock_conn.fetchrow.return_value = {
             "id": "test-uuid-123",
             "name": "test_testset",
